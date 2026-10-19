@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-OWNER_WHATSAPP = "96170000000"
+OWNER_WHATSAPP = "96170773186"
 OWNER_EMAIL = "ryankhreiss@gmail.com"
 
 # ==============================================================================
