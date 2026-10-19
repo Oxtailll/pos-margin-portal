@@ -1,4 +1,6 @@
 import io
+import json
+import os
 import re
 import random
 import urllib.parse
@@ -27,13 +29,18 @@ st.set_page_config(
 
 OWNER_WHATSAPP = "96170000000"
 OWNER_EMAIL = "ryankhreiss@gmail.com"
+ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "ryanadmin2026"
+
+CLIENTS_JSON_PATH = "clients_store.json"
+COGS_STORAGE_DIR = "client_cogs_store"
+os.makedirs(COGS_STORAGE_DIR, exist_ok=True)
 
 def apply_obsidian_theme():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
 
-        /* Core Dark Surfaces */
         html, body, .stApp, [data-testid="stAppViewContainer"] {
             background-color: #090D16 !important;
             color: #F8FAFC !important;
@@ -46,7 +53,6 @@ def apply_obsidian_theme():
             height: 2.5rem !important;
         }
 
-        /* Prevent top clipping of header controls and sidebar */
         .block-container {
             padding-top: 3.25rem !important;
             padding-bottom: 3rem !important;
@@ -56,7 +62,6 @@ def apply_obsidian_theme():
             padding-top: 2.75rem !important;
         }
 
-        /* Sidebar Dark Surface */
         section[data-testid="stSidebar"] {
             background-color: #0D131F !important;
             border-right: 1px solid #1E293B !important;
@@ -65,7 +70,6 @@ def apply_obsidian_theme():
             color: #E2E8F0;
         }
 
-        /* Executive Header Bar */
         .suite-header {
             border-bottom: 1px solid #1E293B;
             padding-bottom: 0.85rem;
@@ -93,12 +97,6 @@ def apply_obsidian_theme():
             margin-top: 0.25rem;
         }
 
-        /* Right-aligned Data Source Pill Container */
-        .datasource-wrapper {
-            padding-top: 0.65rem;
-            display: flex;
-            justify-content: flex-end;
-        }
         div[data-testid="stRadio"] > div[role="radiogroup"] {
             background-color: #111827;
             border: 1px solid #1E293B;
@@ -107,7 +105,6 @@ def apply_obsidian_theme():
             gap: 18px;
         }
 
-        /* Obsidian KPI Metric Cards */
         div[data-testid="stMetric"] {
             background: linear-gradient(180deg, #131C2E 0%, #0F172A 100%) !important;
             border: 1px solid #1E293B !important;
@@ -134,14 +131,12 @@ def apply_obsidian_theme():
             letter-spacing: -0.02em;
         }
 
-        /* Expanders & Containers */
         div[data-testid="stExpander"] {
             background-color: #111827 !important;
             border: 1px solid #1E293B !important;
             border-radius: 8px !important;
         }
 
-        /* Inputs & Selectboxes */
         div[data-baseweb="select"] > div,
         div[data-baseweb="input"] > div {
             background-color: #111827 !important;
@@ -152,7 +147,6 @@ def apply_obsidian_theme():
             color: #CBD5E1 !important;
         }
 
-        /* Primary & Secondary Buttons */
         .stButton > button[kind="primary"],
         .stDownloadButton > button[kind="primary"] {
             background-color: #2563EB !important;
@@ -175,7 +169,6 @@ def apply_obsidian_theme():
             font-weight: 500 !important;
         }
 
-        /* Modern Dark Navigation Tabs */
         .stTabs [data-baseweb="tab-list"] {
             gap: 24px;
             border-bottom: 1px solid #1E293B;
@@ -195,7 +188,6 @@ def apply_obsidian_theme():
             border-bottom: 2px solid #38BDF8 !important;
         }
 
-        /* Dark Callout Banners */
         .exec-banner {
             background-color: #111827;
             border: 1px solid #1E293B;
@@ -219,7 +211,6 @@ def apply_obsidian_theme():
             line-height: 1.55;
         }
 
-        /* Institutional Executive Memo Card */
         .memo-card {
             background: linear-gradient(180deg, #111827 0%, #0D131F 100%);
             border: 1px solid #1E293B;
@@ -313,7 +304,7 @@ def apply_obsidian_theme():
 apply_obsidian_theme()
 
 # ==============================================================================
-# MULTI-TENANT CLIENT PROFILES
+# MULTI-TENANT CLIENT DATABASE & ADMIN PERSISTENCE ENGINE
 # ==============================================================================
 DEFAULT_CLIENTS = {
     "demo": {
@@ -344,28 +335,117 @@ DEFAULT_CLIENTS = {
     }
 }
 
-def get_client_db():
+def get_admin_password() -> str:
     try:
-        if "clients" in st.secrets:
-            return dict(st.secrets["clients"])
+        if "admin_password" in st.secrets:
+            return str(st.secrets["admin_password"])
     except Exception:
         pass
-    return DEFAULT_CLIENTS
+    return DEFAULT_ADMIN_PASSWORD
+
+def get_client_db() -> dict:
+    db = dict(DEFAULT_CLIENTS)
+    # 1. Merge permanent accounts from Streamlit Cloud Secrets
+    try:
+        if "clients" in st.secrets:
+            for k, v in st.secrets["clients"].items():
+                db[str(k).strip().lower()] = dict(v)
+    except Exception:
+        pass
+    # 2. Merge dynamically created accounts from local JSON store
+    if os.path.exists(CLIENTS_JSON_PATH):
+        try:
+            with open(CLIENTS_JSON_PATH, "r", encoding="utf-8") as f:
+                local_clients = json.load(f)
+                for k, v in local_clients.items():
+                    db[str(k).strip().lower()] = dict(v)
+        except Exception:
+            pass
+    return db
+
+def save_client_to_store(username: str, profile_data: dict):
+    clean_user = username.strip().lower()
+    existing = {}
+    if os.path.exists(CLIENTS_JSON_PATH):
+        try:
+            with open(CLIENTS_JSON_PATH, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except Exception:
+            existing = {}
+    existing[clean_user] = profile_data
+    with open(CLIENTS_JSON_PATH, "w", encoding="utf-8") as f:
+        json.dump(existing, f, indent=2)
+
+def delete_client_from_store(username: str):
+    clean_user = username.strip().lower()
+    if os.path.exists(CLIENTS_JSON_PATH):
+        try:
+            with open(CLIENTS_JSON_PATH, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            if clean_user in existing:
+                del existing[clean_user]
+                with open(CLIENTS_JSON_PATH, "w", encoding="utf-8") as f:
+                    json.dump(existing, f, indent=2)
+        except Exception:
+            pass
+
+def save_client_cogs_df(username: str, std_cogs_df: pd.DataFrame):
+    path = os.path.join(COGS_STORAGE_DIR, f"cogs_{username.strip().lower()}.csv")
+    std_cogs_df.to_csv(path, index=False, encoding="utf-8")
+
+def load_client_cogs_df(username: str) -> pd.DataFrame | None:
+    path = os.path.join(COGS_STORAGE_DIR, f"cogs_{username.strip().lower()}.csv")
+    if os.path.exists(path):
+        try:
+            return pd.read_csv(path)
+        except Exception:
+            return None
+    return None
+
+def format_secrets_toml(clients_dict: dict) -> str:
+    lines = [f'admin_password = "{get_admin_password()}"', ""]
+    for uname, p in clients_dict.items():
+        lines.append(f"[clients.{uname}]")
+        lines.append(f'password = "{p.get("password", "client123")}"')
+        lines.append(f'company_name = "{p.get("company_name", uname)}"')
+        lines.append(f'default_lbp_rate = {float(p.get("default_lbp_rate", 89500.0))}')
+        lines.append(f'delivery_fee_pct = {float(p.get("delivery_fee_pct", 25.0))}')
+        lines.append(f'card_fee_pct = {float(p.get("card_fee_pct", 2.0))}')
+        lines.append(f'whish_fee_pct = {float(p.get("whish_fee_pct", 1.0))}')
+        lines.append(f'packaging_cost_usd = {float(p.get("packaging_cost_usd", 0.65))}')
+        lines.append(f'waste_pct = {float(p.get("waste_pct", 3.0))}')
+        lines.append(f'monthly_rent_usd = {float(p.get("monthly_rent_usd", 1800.0))}')
+        lines.append(f'monthly_payroll_usd = {float(p.get("monthly_payroll_usd", 2400.0))}')
+        lines.append(f'monthly_generator_utilities_usd = {float(p.get("monthly_generator_utilities_usd", 750.0))}')
+        lines.append("")
+    return "\n".join(lines)
 
 # ==============================================================================
-# ZERO-FRICTION URL AUTO-LOGIN (?demo=true) & SESSION STATE
+# ZERO-FRICTION URL AUTO-LOGIN (?demo=true or ?client=...) & SESSION STATE
 # ==============================================================================
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.username = None
     st.session_state.client_profile = None
+    st.session_state.is_admin = False
 
 query_params = st.query_params
-if not st.session_state.authenticated and query_params.get("demo", "").lower() in ["1", "true", "yes"]:
-    clients = get_client_db()
-    st.session_state.authenticated = True
-    st.session_state.username = "demo"
-    st.session_state.client_profile = clients["demo"]
+if not st.session_state.authenticated:
+    if query_params.get("demo", "").lower() in ["1", "true", "yes"]:
+        clients = get_client_db()
+        st.session_state.authenticated = True
+        st.session_state.username = "demo"
+        st.session_state.client_profile = clients["demo"]
+        st.session_state.is_admin = False
+    elif "client" in query_params and "key" in query_params:
+        c_user = query_params.get("client", "").strip().lower()
+        c_key = query_params.get("key", "")
+        clients = get_client_db()
+        if c_user in clients and clients[c_user]["password"] == c_key:
+            st.session_state.authenticated = True
+            st.session_state.username = c_user
+            st.session_state.client_profile = clients[c_user]
+            st.session_state.is_admin = False
 
 def login_screen():
     st.write("")
@@ -384,25 +464,35 @@ def login_screen():
             st.session_state.authenticated = True
             st.session_state.username = "demo"
             st.session_state.client_profile = clients["demo"]
+            st.session_state.is_admin = False
             st.rerun()
 
         st.markdown(
             "<div style='text-align:center; color:#64748B; font-size:0.72rem; margin: 18px 0; "
-            "text-transform:uppercase; letter-spacing:0.08em;'>Client Portal Authentication</div>",
+            "text-transform:uppercase; letter-spacing:0.08em;'>Client & Administrator Sign In</div>",
             unsafe_allow_html=True
         )
 
         with st.form("login_form"):
-            username = st.text_input("Client Identifier", placeholder="demo").strip().lower()
+            username = st.text_input("Account Identifier", placeholder="demo or admin").strip().lower()
             password = st.text_input("Password", type="password", placeholder="••••••••")
             submit = st.form_submit_button("Sign In", use_container_width=True)
 
             if submit:
+                if username == ADMIN_USERNAME and password == get_admin_password():
+                    clients = get_client_db()
+                    st.session_state.authenticated = True
+                    st.session_state.username = ADMIN_USERNAME
+                    st.session_state.client_profile = clients["demo"]
+                    st.session_state.is_admin = True
+                    st.rerun()
+
                 clients = get_client_db()
                 if username in clients and clients[username]["password"] == password:
                     st.session_state.authenticated = True
                     st.session_state.username = username
                     st.session_state.client_profile = clients[username]
+                    st.session_state.is_admin = False
                     st.rerun()
                 else:
                     st.error("Invalid credentials. Use the button above to launch the demo environment.")
@@ -808,7 +898,7 @@ def build_excel_in_memory(
     return output.getvalue()
 
 # ==============================================================================
-# MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR (STRUCTURED HTML + WHATSAPP TEXT)
+# MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR
 # ==============================================================================
 def build_cfo_memo_content(
     lang: str,
@@ -835,22 +925,10 @@ def build_cfo_memo_content(
                 <span class="memo-meta">PÉRIODE ANALYSÉE : {active_days} JOURS</span>
             </div>
             <div class="memo-grid">
-                <div class="memo-stat">
-                    <div class="memo-stat-label">Chiffre d'Affaires Brut</div>
-                    <div class="memo-stat-val">${total_gross:,.2f}</div>
-                </div>
-                <div class="memo-stat">
-                    <div class="memo-stat-label">EBITDA Opérationnel</div>
-                    <div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div>
-                </div>
-                <div class="memo-stat">
-                    <div class="memo-stat-label">Point Mort Quotidien</div>
-                    <div class="memo-stat-val">${daily_breakeven_sales:,.2f} / j</div>
-                </div>
-                <div class="memo-stat">
-                    <div class="memo-stat-label">Trésorerie Retenue</div>
-                    <div class="memo-stat-val">${aggregator_hold:,.2f}</div>
-                </div>
+                <div class="memo-stat"><div class="memo-stat-label">Chiffre d'Affaires Brut</div><div class="memo-stat-val">${total_gross:,.2f}</div></div>
+                <div class="memo-stat"><div class="memo-stat-label">EBITDA Opérationnel</div><div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div></div>
+                <div class="memo-stat"><div class="memo-stat-label">Point Mort Quotidien</div><div class="memo-stat-val">${daily_breakeven_sales:,.2f} / j</div></div>
+                <div class="memo-stat"><div class="memo-stat-label">Trésorerie Retenue</div><div class="memo-stat-val">${aggregator_hold:,.2f}</div></div>
             </div>
             <div class="memo-section-title">1. Synthèse des Flux & Fuites Opérationnelles</div>
             <ul class="memo-list">
@@ -886,22 +964,10 @@ def build_cfo_memo_content(
                 <span class="memo-meta">فترة التدقيق: {active_days} يوم</span>
             </div>
             <div class="memo-grid">
-                <div class="memo-stat">
-                    <div class="memo-stat-label">إجمالي المبيعات</div>
-                    <div class="memo-stat-val">${total_gross:,.2f}</div>
-                </div>
-                <div class="memo-stat">
-                    <div class="memo-stat-label">صافي الأرباح (EBITDA)</div>
-                    <div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div>
-                </div>
-                <div class="memo-stat">
-                    <div class="memo-stat-label">نقطة التعادل اليومية</div>
-                    <div class="memo-stat-val">${daily_breakeven_sales:,.2f}</div>
-                </div>
-                <div class="memo-stat">
-                    <div class="memo-stat-label">السيولة المحتجزة</div>
-                    <div class="memo-stat-val">${aggregator_hold:,.2f}</div>
-                </div>
+                <div class="memo-stat"><div class="memo-stat-label">إجمالي المبيعات</div><div class="memo-stat-val">${total_gross:,.2f}</div></div>
+                <div class="memo-stat"><div class="memo-stat-label">صافي الأرباح (EBITDA)</div><div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div></div>
+                <div class="memo-stat"><div class="memo-stat-label">نقطة التعادل اليومية</div><div class="memo-stat-val">${daily_breakeven_sales:,.2f}</div></div>
+                <div class="memo-stat"><div class="memo-stat-label">السيولة المحتجزة</div><div class="memo-stat-val">${aggregator_hold:,.2f}</div></div>
             </div>
             <div class="memo-section-title">1. تحليل التدفقات النقدية والاستقطاعات</div>
             <ul class="memo-list" style="padding-right:18px; padding-left:0;">
@@ -936,22 +1002,10 @@ def build_cfo_memo_content(
             <span class="memo-meta">AUDIT WINDOW: {active_days} ACTIVE DAYS</span>
         </div>
         <div class="memo-grid">
-            <div class="memo-stat">
-                <div class="memo-stat-label">Gross POS Revenue</div>
-                <div class="memo-stat-val">${total_gross:,.2f}</div>
-            </div>
-            <div class="memo-stat">
-                <div class="memo-stat-label">Operating EBITDA</div>
-                <div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div>
-            </div>
-            <div class="memo-stat">
-                <div class="memo-stat-label">Daily Break-Even</div>
-                <div class="memo-stat-val">${daily_breakeven_sales:,.2f} / day</div>
-            </div>
-            <div class="memo-stat">
-                <div class="memo-stat-label">Aggregator Hold</div>
-                <div class="memo-stat-val">${aggregator_hold:,.2f}</div>
-            </div>
+            <div class="memo-stat"><div class="memo-stat-label">Gross POS Revenue</div><div class="memo-stat-val">${total_gross:,.2f}</div></div>
+            <div class="memo-stat"><div class="memo-stat-label">Operating EBITDA</div><div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div></div>
+            <div class="memo-stat"><div class="memo-stat-label">Daily Break-Even</div><div class="memo-stat-val">${daily_breakeven_sales:,.2f} / day</div></div>
+            <div class="memo-stat"><div class="memo-stat-label">Aggregator Hold</div><div class="memo-stat-val">${aggregator_hold:,.2f}</div></div>
         </div>
         <div class="memo-section-title">1. Cash Flow & Margin Leakage Findings</div>
         <ul class="memo-list">
@@ -980,20 +1034,154 @@ def build_cfo_memo_content(
     return html_card, wa_text
 
 # ==============================================================================
+# MASTER ADMIN CLIENT PROVISIONING CONSOLE
+# ==============================================================================
+def render_admin_console():
+    st.markdown("""
+    <div class="suite-header">
+        <div class="suite-kicker">MASTER ADMINISTRATOR CONSOLE</div>
+        <h1 class="suite-title">Client Account Provisioning & Multi-Tenant Manager</h1>
+        <div class="suite-subtitle">Create new client accounts, pre-load client SKU COGS sheets, generate 1-click client magic links, and export permanent cloud secrets.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    clients_db = get_client_db()
+
+    col_form, col_list = st.columns([1.35, 1.0])
+
+    with col_form:
+        st.markdown("#### 1. Create or Update Client Account")
+        with st.form("create_client_form"):
+            f1, f2 = st.columns(2)
+            with f1:
+                new_username = st.text_input("Client Login Username *", placeholder="e.g., roadster_ashrafieh").strip().lower()
+                new_company = st.text_input("Company / Brand Display Name *", placeholder="e.g., Roadster Diner (Ashrafieh)")
+                new_lbp_rate = st.number_input("Default LBP / USD Rate", value=89500.0, step=500.0)
+                new_deliv_fee = st.number_input("Toters / Aggregator Fee (%)", value=25.0, step=0.5)
+                new_pkg_cost = st.number_input("Delivery Packaging / Unit ($)", value=0.65, step=0.05)
+            with f2:
+                new_password = st.text_input("Client Password *", placeholder="e.g., rd2026")
+                new_card_fee = st.number_input("Card POS Fee (%)", value=2.0, step=0.1)
+                new_whish_fee = st.number_input("Digital Wallet / Whish Fee (%)", value=1.0, step=0.1)
+                new_waste_pct = st.number_input("Kitchen Waste Allowance (%)", value=3.0, step=0.5)
+
+            st.markdown("**Client Monthly Fixed OPEX Defaults (USD)**")
+            o1, o2, o3 = st.columns(3)
+            with o1:
+                new_rent = st.number_input("Monthly Rent ($)", value=2500.0, step=100.0)
+            with o2:
+                new_payroll = st.number_input("Monthly Payroll ($)", value=4500.0, step=100.0)
+            with o3:
+                new_utilities = st.number_input("Generator & Utilities ($)", value=900.0, step=50.0)
+
+            st.markdown("**Optional: Pre-Load Client Master SKU COGS File (.xlsx / .csv)**")
+            st.caption("If you upload their COGS sheet here, it attaches to their account automatically so they only ever need to upload 1 file (their weekly POS sales export).")
+            admin_cogs_file = st.file_uploader("Upload Client COGS Sheet", type=["csv", "xlsx", "xls"])
+
+            save_btn = st.form_submit_button("Create / Update Client Account", type="primary", use_container_width=True)
+
+            if save_btn:
+                clean_u = re.sub(r"[^a-z0-9_-]", "", new_username)
+                if not clean_u or not new_password or not new_company:
+                    st.error("Please provide a valid Username, Password, and Company Name.")
+                else:
+                    profile_payload = {
+                        "password": new_password.strip(),
+                        "company_name": new_company.strip(),
+                        "default_lbp_rate": float(new_lbp_rate),
+                        "delivery_fee_pct": float(new_deliv_fee),
+                        "card_fee_pct": float(new_card_fee),
+                        "whish_fee_pct": float(new_whish_fee),
+                        "packaging_cost_usd": float(new_pkg_cost),
+                        "waste_pct": float(new_waste_pct),
+                        "monthly_rent_usd": float(new_rent),
+                        "monthly_payroll_usd": float(new_payroll),
+                        "monthly_generator_utilities_usd": float(new_utilities),
+                    }
+                    save_client_to_store(clean_u, profile_payload)
+
+                    if admin_cogs_file is not None:
+                        raw_c = safe_read_file(admin_cogs_file)
+                        c_cols = list(raw_c.columns)
+                        cost_idx = guess_column_index(c_cols, ["cost", "cogs", "unit_cost", "achat", "cout"])
+                        item_idx = guess_column_index(c_cols, ["item", "product", "article", "name", "designation"])
+                        sku_idx = guess_column_index(c_cols, ["sku", "code", "barcode", "ref"])
+                        std_c = pd.DataFrame({
+                            "SKU": raw_c[c_cols[sku_idx]].astype(str).str.strip(),
+                            "Item_Name": raw_c[c_cols[item_idx]].astype(str).str.strip(),
+                            "Unit_Cost_USD": clean_numeric_series(raw_c[c_cols[cost_idx]], 0.0),
+                            "Category": "Client Master"
+                        })
+                        save_client_cogs_df(clean_u, std_c)
+
+                    st.success(f"Account `{clean_u}` ({new_company}) is now live!")
+                    st.rerun()
+
+    with col_list:
+        st.markdown("#### 2. Active Client Accounts & Onboarding Links")
+        rows = []
+        for u, p in clients_db.items():
+            has_cogs = "Yes (Pre-Loaded)" if load_client_cogs_df(u) is not None else "Standard"
+            rows.append({
+                "Username": u,
+                "Password": p.get("password", ""),
+                "Company": p.get("company_name", ""),
+                "Delivery Fee": f"{p.get('delivery_fee_pct', 25.0):.1f}%",
+                "Monthly OPEX": f"${p.get('monthly_rent_usd', 0) + p.get('monthly_payroll_usd', 0) + p.get('monthly_generator_utilities_usd', 0):,.0f}",
+                "Saved COGS": has_cogs
+            })
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+        selected_client = st.selectbox("Select Client to Generate Onboarding Package or Preview", list(clients_db.keys()))
+        sel_p = clients_db[selected_client]
+        magic_client_url = f"https://exec-pos-audit.streamlit.app/?client={selected_client}&key={urllib.parse.quote(str(sel_p['password']))}"
+
+        onboarding_text = (
+            f"*{sel_p['company_name']} — Executive POS & EBITDA Portal Access*\n\n"
+            f"Your private financial reconciliation portal is now configured and live:\n"
+            f"• *Direct 1-Click Login Link:* {magic_client_url}\n"
+            f"• *Username:* {selected_client}\n"
+            f"• *Password:* {sel_p['password']}"
+        )
+        st.code(onboarding_text, language="text")
+
+        b_act1, b_act2, b_act3 = st.columns(3)
+        with b_act1:
+            if st.button("Impersonate / Preview Client", use_container_width=True):
+                st.session_state.client_profile = sel_p
+                st.session_state.username = selected_client
+                st.session_state.impersonating = True
+                st.rerun()
+        with b_act2:
+            wa_onboard_url = f"https://wa.me/?text={urllib.parse.quote(onboarding_text)}"
+            st.link_button("Send Login via WhatsApp", url=wa_onboard_url, use_container_width=True)
+        with b_act3:
+            if selected_client not in ["demo", "bistro_client"]:
+                if st.button("Delete Account", use_container_width=True):
+                    delete_client_from_store(selected_client)
+                    st.rerun()
+
+        with st.expander("Permanent Cloud Backup (Streamlit Secrets TOML)"):
+            st.caption("Copy and paste this block into Streamlit Cloud -> Settings -> Secrets so all accounts persist permanently across server redeployments.")
+            st.code(format_secrets_toml(clients_db), language="toml")
+
+# ==============================================================================
 # MAIN AUTHENTICATED WORKSPACE
 # ==============================================================================
 def main_portal():
     profile = st.session_state.client_profile
     company_name = profile["company_name"]
+    is_admin = st.session_state.get("is_admin", False)
 
     with st.sidebar:
         st.markdown(f"<div style='font-size:1.05rem; font-weight:700; color:#F8FAFC; margin-bottom:2px;'>{company_name}</div>", unsafe_allow_html=True)
-        st.caption(f"Account: `{st.session_state.username}`")
+        st.caption(f"Account: `{st.session_state.username}`" + (" (MASTER ADMIN)" if is_admin else ""))
 
-        role = st.selectbox(
-            "Access Role",
-            ["CFO / Executive View", "Branch Manager (Cash Recon)"]
-        )
+        role_options = ["CFO / Executive View", "Branch Manager (Cash Recon)"]
+        if is_admin:
+            role_options = ["Master Admin: Client Provisioning"] + role_options
+
+        role = st.selectbox("Workspace Mode", role_options)
 
         with st.expander("1. FX & Channel Fees", expanded=True):
             lbp_rate = st.number_input("LBP / USD Exchange Rate", min_value=1000.0, max_value=500000.0, value=float(profile.get("default_lbp_rate", 89500.0)), step=500.0)
@@ -1018,7 +1206,13 @@ def main_portal():
         if st.button("Sign Out", use_container_width=True):
             st.query_params.clear()
             st.session_state.authenticated = False
+            st.session_state.is_admin = False
             st.rerun()
+
+    # If Master Admin selected the Provisioning Console
+    if role == "Master Admin: Client Provisioning":
+        render_admin_console()
+        return
 
     # Top Workspace Header & Aligned Data Source Selector
     top_left, top_right = st.columns([2.0, 1.4], vertical_alignment="center")
@@ -1038,13 +1232,15 @@ def main_portal():
         )
 
     std_pos, std_cogs = None, None
+    preloaded_client_cogs = load_client_cogs_df(st.session_state.username)
 
     if mode == "Upload Custom POS File":
         u_col1, u_col2 = st.columns(2)
         with u_col1:
             pos_file = st.file_uploader("1. Raw POS Export (.xlsx, .xls, .csv) [Required]", type=["csv", "xlsx", "xls"])
         with u_col2:
-            cogs_file = st.file_uploader("2. Master SKU COGS (.xlsx, .xls, .csv) [Optional]", type=["csv", "xlsx", "xls"])
+            cogs_label = "2. Master SKU COGS [Optional — Pre-Loaded Active]" if preloaded_client_cogs is not None else "2. Master SKU COGS (.xlsx, .xls, .csv) [Optional]"
+            cogs_file = st.file_uploader(cogs_label, type=["csv", "xlsx", "xls"])
 
         if not pos_file:
             st.markdown('<div class="exec-banner">Upload a POS export file above to initialize automated column mapping.</div>', unsafe_allow_html=True)
@@ -1112,10 +1308,12 @@ def main_portal():
                 "Unit_Cost_USD": raw_pos[col_inline_cost],
                 "Category": "POS Mapped"
             })
+        elif preloaded_client_cogs is not None:
+            std_cogs = preloaded_client_cogs
     else:
         sample_pos, sample_cogs = generate_sample_datasets(lbp_rate)
         std_pos = sample_pos.rename(columns={"Item_Sold": "Item_Name"})
-        std_cogs = sample_cogs
+        std_cogs = preloaded_client_cogs if preloaded_client_cogs is not None else sample_cogs
 
     cleaned_df = process_standardized_data(
         std_pos, std_cogs, lbp_rate, delivery_fee, card_fee, whish_fee,
@@ -1126,7 +1324,6 @@ def main_portal():
         st.error("No valid positive sales rows were found. Verify the Gross Sales column selection.")
         return
 
-    # Financial Aggregations
     active_days = max(1, cleaned_df["Clean_Date"].nunique())
     monthly_total_opex = monthly_rent + monthly_payroll + monthly_utilities
     daily_fixed_opex = monthly_total_opex / 30.0
@@ -1151,7 +1348,6 @@ def main_portal():
 
     sku_matrix = build_bcg_menu_matrix(cleaned_df)
 
-    # Branch Manager Restricted Role
     if role == "Branch Manager (Cash Recon)":
         st.markdown('<div class="exec-banner"><strong>Branch Manager View:</strong> Supplier COGS and Executive EBITDA are hidden. Displaying Shift Cash Drawer Reconciliation.</div>', unsafe_allow_html=True)
         branches_list = ["All Branches"] + sorted(cleaned_df["Branch"].unique().tolist())
@@ -1181,7 +1377,6 @@ def main_portal():
             st.warning(f"Cash Overage — Drawer is over by +${variance_usd:,.2f} (Verify unrecorded POS tickets)")
         return
 
-    # Executive Summary Bar + Export Button
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.metric("Gross POS Sales", f"${total_gross:,.2f}")
     k2.metric("Fees & Packaging", f"-${total_fees_pkg:,.2f}")
@@ -1213,7 +1408,6 @@ def main_portal():
         "Executive Memo"
     ])
 
-    # TAB 1: BCG MATRIX
     with tab1:
         plowhorses_dogs = sku_matrix[sku_matrix["Classification"].str.contains("PLOWHORSE|UNDERPERFORMER")]
         if not plowhorses_dogs.empty:
@@ -1247,7 +1441,6 @@ def main_portal():
             }
         )
 
-    # TAB 2: PRICE ELASTICITY LAB
     with tab2:
         st.markdown("**Unit Price & Volume Elasticity Simulator**")
         st.caption("Model the net monthly EBITDA impact of repricing an item while accounting for potential customer volume dropoff.")
@@ -1292,7 +1485,6 @@ def main_portal():
                 unsafe_allow_html=True
             )
 
-    # TAB 3: EBITDA, BREAK-EVEN & WORKING CAPITAL
     with tab3:
         col_p1, col_p2 = st.columns([1.3, 1])
         with col_p1:
@@ -1347,7 +1539,6 @@ def main_portal():
                 }
             )
 
-    # TAB 4: CASH DRAWER SHIFT AUDIT
     with tab4:
         st.markdown("**End-of-Shift Cash Drawer Reconciliation**")
         branches_list = ["All Branches"] + sorted(cleaned_df["Branch"].unique().tolist())
@@ -1366,7 +1557,6 @@ def main_portal():
             st.metric("Expected POS Cash", f"${expected_cash:,.2f}")
             st.metric("Total Physical Cash (USD Equiv.)", f"${total_counted:,.2f}", f"{variance:+.2f} USD Variance")
 
-    # TAB 5: DISCOUNT & VOID CONTROLS
     with tab5:
         st.markdown("**Cashier Discount & Void Anomaly Audit**")
         st.caption("Monitors discount frequency across operators and branches to identify unauthorized comps or register leakage.")
@@ -1399,7 +1589,6 @@ def main_portal():
             }
         )
 
-    # TAB 6: EXECUTIVE MEMO (STRUCTURED HTML CARD)
     with tab6:
         memo_lang = st.radio("Memo Language", ["English", "Français", "العربية"], horizontal=True)
         aggregator_hold_val = cleaned_df[cleaned_df["Channel"] == "Delivery Aggregators"]["Net_Revenue_USD"].sum()
