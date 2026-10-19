@@ -25,7 +25,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-OWNER_WHATSAPP = "96170773186"
+OWNER_WHATSAPP = "96170000000"
 OWNER_EMAIL = "ryankhreiss@gmail.com"
 
 def apply_obsidian_theme():
@@ -34,19 +34,26 @@ def apply_obsidian_theme():
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
 
         /* Core Dark Surfaces */
-        html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+        html, body, .stApp, [data-testid="stAppViewContainer"] {
             background-color: #090D16 !important;
             color: #F8FAFC !important;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
         #MainMenu, footer {visibility: hidden;}
-        header {background: transparent !important;}
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+            height: 2.5rem !important;
+        }
 
+        /* Prevent top clipping of header controls and sidebar */
         .block-container {
-            padding-top: 1.5rem;
-            padding-bottom: 3rem;
+            padding-top: 3.25rem !important;
+            padding-bottom: 3rem !important;
             max-width: 1440px;
+        }
+        section[data-testid="stSidebar"] > div:first-child {
+            padding-top: 2.75rem !important;
         }
 
         /* Sidebar Dark Surface */
@@ -70,19 +77,34 @@ def apply_obsidian_theme():
             text-transform: uppercase;
             letter-spacing: 0.1em;
             color: #38BDF8;
-            margin-bottom: 0.2rem;
+            margin-bottom: 0.25rem;
         }
         .suite-title {
-            font-size: 1.55rem;
+            font-size: 1.6rem;
             font-weight: 700;
             color: #F8FAFC;
             letter-spacing: -0.02em;
             margin: 0;
+            line-height: 1.2;
         }
         .suite-subtitle {
             font-size: 0.85rem;
             color: #94A3B8;
             margin-top: 0.25rem;
+        }
+
+        /* Right-aligned Data Source Pill Container */
+        .datasource-wrapper {
+            padding-top: 0.65rem;
+            display: flex;
+            justify-content: flex-end;
+        }
+        div[data-testid="stRadio"] > div[role="radiogroup"] {
+            background-color: #111827;
+            border: 1px solid #1E293B;
+            border-radius: 8px;
+            padding: 6px 14px;
+            gap: 18px;
         }
 
         /* Obsidian KPI Metric Cards */
@@ -196,6 +218,95 @@ def apply_obsidian_theme():
             color: #FCA5A5;
             line-height: 1.55;
         }
+
+        /* Institutional Executive Memo Card */
+        .memo-card {
+            background: linear-gradient(180deg, #111827 0%, #0D131F 100%);
+            border: 1px solid #1E293B;
+            border-top: 3px solid #38BDF8;
+            border-radius: 8px;
+            padding: 24px 28px;
+            margin-top: 0.5rem;
+            margin-bottom: 1.25rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+        .memo-header {
+            border-bottom: 1px solid #1E293B;
+            padding-bottom: 14px;
+            margin-bottom: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            flex-wrap: wrap;
+        }
+        .memo-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: #F8FAFC;
+            margin: 0;
+        }
+        .memo-meta {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.76rem;
+            color: #38BDF8;
+        }
+        .memo-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .memo-stat {
+            background-color: #090D16;
+            border: 1px solid #1E293B;
+            border-radius: 6px;
+            padding: 10px 14px;
+        }
+        .memo-stat-label {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748B;
+            margin-bottom: 4px;
+        }
+        .memo-stat-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #F8FAFC;
+        }
+        .memo-section-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94A3B8;
+            margin-top: 16px;
+            margin-bottom: 10px;
+        }
+        .memo-list {
+            margin: 0;
+            padding-left: 18px;
+            color: #CBD5E1;
+            font-size: 0.9rem;
+            line-height: 1.7;
+        }
+        .memo-list li {
+            margin-bottom: 8px;
+        }
+        .memo-highlight {
+            color: #F8FAFC;
+            font-weight: 600;
+        }
+        .memo-code {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #1E293B;
+            color: #38BDF8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.84rem;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -214,9 +325,9 @@ DEFAULT_CLIENTS = {
         "whish_fee_pct": 1.0,
         "packaging_cost_usd": 0.65,
         "waste_pct": 3.0,
-        "monthly_rent_usd": 3500.0,
-        "monthly_payroll_usd": 6200.0,
-        "monthly_generator_utilities_usd": 1400.0,
+        "monthly_rent_usd": 1800.0,
+        "monthly_payroll_usd": 2400.0,
+        "monthly_generator_utilities_usd": 750.0,
     },
     "bistro_client": {
         "password": "bistro2026",
@@ -227,9 +338,9 @@ DEFAULT_CLIENTS = {
         "whish_fee_pct": 1.0,
         "packaging_cost_usd": 0.50,
         "waste_pct": 2.5,
-        "monthly_rent_usd": 2800.0,
-        "monthly_payroll_usd": 4500.0,
-        "monthly_generator_utilities_usd": 1100.0,
+        "monthly_rent_usd": 1600.0,
+        "monthly_payroll_usd": 2200.0,
+        "monthly_generator_utilities_usd": 650.0,
     }
 }
 
@@ -257,7 +368,6 @@ if not st.session_state.authenticated and query_params.get("demo", "").lower() i
     st.session_state.client_profile = clients["demo"]
 
 def login_screen():
-    st.write("")
     st.write("")
     col1, col2, col3 = st.columns([1.2, 1.4, 1.2])
     with col2:
@@ -379,20 +489,20 @@ def generate_sample_datasets(lbp_rate: float):
         {"SKU": "SKU-106", "Item_Name": "Specialty Iced Matcha Latte", "Category": "Beverages", "Unit_Cost_USD": 1.30, "Menu_Price_USD": 5.50},
     ]
     cogs_df = pd.DataFrame(cogs_data)
-    sku_weights = [0.24, 0.22, 0.07, 0.19, 0.18, 0.10]
+    sku_weights = [0.26, 0.20, 0.09, 0.19, 0.16, 0.10]
 
     branches = ["Ashrafieh Flagship", "Mar Mikhael Branch", "Dbayeh Highway"]
     cashiers = ["Nabil K.", "Maya S.", "Rami H.", "System_Aggregator"]
     channels = ["In-Store Cash", "Whish Money", "Bank Card POS", "Toters Delivery", "Talabat / Deliveroo"]
-    channel_weights = [0.30, 0.18, 0.15, 0.25, 0.12]
+    channel_weights = [0.32, 0.18, 0.15, 0.23, 0.12]
 
     random.seed(42)
     rows = []
     start_date = datetime(2026, 10, 1)
 
-    for i in range(1, 395):
+    for i in range(1, 621):
         sku_info = random.choices(cogs_data, weights=sku_weights)[0]
-        qty = random.choices([1, 2, 3, 4], weights=[0.55, 0.30, 0.10, 0.05])[0]
+        qty = random.choices([1, 2, 3, 4], weights=[0.50, 0.32, 0.12, 0.06])[0]
         channel = random.choices(channels, weights=channel_weights)[0]
         branch = random.choice(branches)
         cashier = "System_Aggregator" if "Toters" in channel or "Talabat" in channel else random.choice(cashiers[:3])
@@ -403,9 +513,9 @@ def generate_sample_datasets(lbp_rate: float):
         list_gross_usd = sku_info["Menu_Price_USD"] * qty
 
         discount_usd = 0.0
-        if cashier == "Rami H." and channel == "In-Store Cash" and random.random() < 0.28:
-            discount_usd = round(list_gross_usd * random.choice([0.25, 0.50, 1.0]), 2)
-        elif random.random() < 0.04:
+        if cashier == "Rami H." and channel == "In-Store Cash" and random.random() < 0.25:
+            discount_usd = round(list_gross_usd * random.choice([0.20, 0.40, 0.50]), 2)
+        elif random.random() < 0.03:
             discount_usd = round(list_gross_usd * 0.10, 2)
 
         net_charged_usd = max(0.0, list_gross_usd - discount_usd)
@@ -698,9 +808,9 @@ def build_excel_in_memory(
     return output.getvalue()
 
 # ==============================================================================
-# MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR
+# MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR (STRUCTURED HTML + WHATSAPP TEXT)
 # ==============================================================================
-def generate_cfo_memo(
+def build_cfo_memo_content(
     lang: str,
     company_name: str,
     active_days: int,
@@ -711,40 +821,163 @@ def generate_cfo_memo(
     daily_breakeven_sales: float,
     sku_matrix: pd.DataFrame,
     aggregator_hold: float
-) -> str:
+) -> tuple[str, str]:
     bleeders = sku_matrix[sku_matrix["Classification"].str.contains("PLOWHORSE|UNDERPERFORMER")]
     worst_items = ", ".join(bleeders["Item_Name"].head(2).tolist()) if not bleeders.empty else "None"
     top_stars = ", ".join(sku_matrix[sku_matrix["Classification"].str.contains("STAR")]["Item_Name"].head(2).tolist()) or "Core Menu"
     est_monthly_recovery = (bleeders["Units_Sold"].sum() * 1.25 * (30.0 / active_days)) if not bleeders.empty else 0.0
 
     if lang == "Français":
-        return f"""#### NOTE D'AUDIT EXÉCUTIF — {company_name.upper()} ({active_days} Jours)
-* **Chiffre d'Affaires Brut Normalisé :** `${total_gross:,.2f} USD` | **EBITDA Opérationnel :** `${true_ebitda:,.2f} USD ({ebitda_margin_pct:.1f}%)`
-* **Seuil de Rentabilité Quotidien :** L'établissement doit générer au minimum **`${daily_breakeven_sales:,.2f} USD / jour`** pour couvrir les charges fixes (loyer, salaires, énergie).
-* **Commissions & Emballages :** **`-${total_fees_pkg:,.2f} USD`** absorbés par les plateformes de livraison, terminaux TPE et coûts d'emballage.
-* **Trésorerie en Attente de Règlement :** **`${aggregator_hold:,.2f} USD`** de recettes nettes sont actuellement retenus par les agrégateurs (délai de 7 à 14 jours).
-* **Recommandations Stratégiques (Matrice BCG) :**
-  1. **Protéger les Produits Leaders (Stars) :** *{top_stars}* génèrent la plus forte contribution unitaire. Maintenir les prix pleins sans remise.
-  2. **Ajustement Tarifaire Ciblé :** *{worst_items}* présentent une marge insuffisante après commission. Une hausse de **+$1.25 USD** sur les applications de livraison générera **`+${est_monthly_recovery:,.2f} USD / mois`** d'EBITDA additionnel."""
+        html_card = f"""
+        <div class="memo-card">
+            <div class="memo-header">
+                <h3 class="memo-title">NOTE D'AUDIT EXÉCUTIF — {company_name.upper()}</h3>
+                <span class="memo-meta">PÉRIODE ANALYSÉE : {active_days} JOURS</span>
+            </div>
+            <div class="memo-grid">
+                <div class="memo-stat">
+                    <div class="memo-stat-label">Chiffre d'Affaires Brut</div>
+                    <div class="memo-stat-val">${total_gross:,.2f}</div>
+                </div>
+                <div class="memo-stat">
+                    <div class="memo-stat-label">EBITDA Opérationnel</div>
+                    <div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div>
+                </div>
+                <div class="memo-stat">
+                    <div class="memo-stat-label">Point Mort Quotidien</div>
+                    <div class="memo-stat-val">${daily_breakeven_sales:,.2f} / j</div>
+                </div>
+                <div class="memo-stat">
+                    <div class="memo-stat-label">Trésorerie Retenue</div>
+                    <div class="memo-stat-val">${aggregator_hold:,.2f}</div>
+                </div>
+            </div>
+            <div class="memo-section-title">1. Synthèse des Flux & Fuites Opérationnelles</div>
+            <ul class="memo-list">
+                <li><span class="memo-highlight">Seuil de Rentabilité :</span> L'établissement doit générer au minimum <span class="memo-code">${daily_breakeven_sales:,.2f} USD / jour</span> pour couvrir les charges fixes (loyer, salaires, énergie).</li>
+                <li><span class="memo-highlight">Commissions & Emballages :</span> <span class="memo-code">-${total_fees_pkg:,.2f} USD</span> absorbés par les plateformes de livraison, terminaux TPE et coûts d'emballage.</li>
+                <li><span class="memo-highlight">Besoin en Fonds de Roulement :</span> <span class="memo-code">${aggregator_hold:,.2f} USD</span> de recettes nettes sont actuellement en attente de règlement par les agrégateurs (cycle de 7 à 14 jours).</li>
+            </ul>
+            <div class="memo-section-title">2. Plan d'Action Menu Engineering (Matrice BCG)</div>
+            <ul class="memo-list">
+                <li><span class="memo-highlight">Protéger les Produits Leaders (Stars) :</span> <em>{top_stars}</em> génèrent la plus forte contribution unitaire. Maintenir les prix pleins sans remise promotionnelle.</li>
+                <li><span class="memo-highlight">Ajustement Tarifaire Ciblé :</span> <em>{worst_items}</em> présentent une marge insuffisante après commission. Une hausse de <span class="memo-code">+$1.25 USD</span> sur les applications de livraison générera <span class="memo-code">+${est_monthly_recovery:,.2f} USD / mois</span> d'EBITDA net additionnel.</li>
+            </ul>
+        </div>
+        """
+        wa_text = (
+            f"*NOTE D'AUDIT EXÉCUTIF — {company_name.upper()} ({active_days} Jours)*\n\n"
+            f"• *CA Brut Normalisé :* ${total_gross:,.2f} USD\n"
+            f"• *EBITDA Opérationnel :* ${true_ebitda:,.2f} USD ({ebitda_margin_pct:.1f}%)\n"
+            f"• *Point Mort Quotidien :* ${daily_breakeven_sales:,.2f} USD / jour\n"
+            f"• *Commissions & Emballages :* -${total_fees_pkg:,.2f} USD\n"
+            f"• *Trésorerie Retenue (Agrégateurs) :* ${aggregator_hold:,.2f} USD\n\n"
+            f"*Plan d'Action Menu Engineering :*\n"
+            f"1. *Stars à protéger :* {top_stars}\n"
+            f"2. *Articles à revaloriser (+$1.25) :* {worst_items} -> Gain estimé : *+${est_monthly_recovery:,.2f} USD / mois*"
+        )
+        return html_card, wa_text
 
     if lang == "العربية":
-        return f"""#### الملخص المالي التنفيذي — {company_name} ({active_days} يوم)
-* **إجمالي المبيعات (بالدولار الفريش):** `${total_gross:,.2f}` | **صافي الأرباح التشغيلية (EBITDA):** `${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)`
-* **نقطة التعادل اليومية:** يحتاج الفرع إلى تحقيق مبيعات يومية لا تقل عن **`${daily_breakeven_sales:,.2f} في اليوم`** لتغطية المصاريف الثابتة (الإيجار، الرواتب، الطاقة).
-* **عمولات التوصيل وتكلفة التغليف:** تم اقتطاع **`-${total_fees_pkg:,.2f}`** كعمولات لتطبيقات التوصيل وأدوات التغليف.
-* **السيولة المحتجزة قيد التحصيل:** يوجد حالياً **`${aggregator_hold:,.2f}`** من صافي المبيعات قيد التحويل من شركات التوصيل (دورة تحصيل من 7 إلى 14 يوماً).
-* **التوصيات التنفيذية لهندسة القائمة:**
-  1. **حماية الأصناف عالية الربحية (Stars):** الأصناف (*{top_stars}*) تمثل الركيزة الأساسية للربح التشغيلي.
-  2. **إعادة تسعير الأصناف منخفضة الهامش:** الأصناف (*{worst_items}*) تتآكل ربحيتها بسبب عمولة التوصيل. تعديل السعر بمقدار **+$1.25** سيضيف **`+${est_monthly_recovery:,.2f} شهرياً`** إلى صافي الأرباح."""
+        html_card = f"""
+        <div class="memo-card" dir="rtl" style="text-align:right;">
+            <div class="memo-header">
+                <h3 class="memo-title">التقرير المالي التنفيذي وتدقيق الربحية — {company_name}</h3>
+                <span class="memo-meta">فترة التدقيق: {active_days} يوم</span>
+            </div>
+            <div class="memo-grid">
+                <div class="memo-stat">
+                    <div class="memo-stat-label">إجمالي المبيعات</div>
+                    <div class="memo-stat-val">${total_gross:,.2f}</div>
+                </div>
+                <div class="memo-stat">
+                    <div class="memo-stat-label">صافي الأرباح (EBITDA)</div>
+                    <div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div>
+                </div>
+                <div class="memo-stat">
+                    <div class="memo-stat-label">نقطة التعادل اليومية</div>
+                    <div class="memo-stat-val">${daily_breakeven_sales:,.2f}</div>
+                </div>
+                <div class="memo-stat">
+                    <div class="memo-stat-label">السيولة المحتجزة</div>
+                    <div class="memo-stat-val">${aggregator_hold:,.2f}</div>
+                </div>
+            </div>
+            <div class="memo-section-title">1. تحليل التدفقات النقدية والاستقطاعات</div>
+            <ul class="memo-list" style="padding-right:18px; padding-left:0;">
+                <li><span class="memo-highlight">نقطة التعادل اليومية:</span> يحتاج الفرع إلى تحقيق مبيعات يومية لا تقل عن <span class="memo-code">${daily_breakeven_sales:,.2f}</span> لتغطية المصاريف الثابتة (الإيجار، الرواتب، الطاقة).</li>
+                <li><span class="memo-highlight">عمولات التوصيل وتكلفة التغليف:</span> تم اقتطاع <span class="memo-code">-${total_fees_pkg:,.2f}</span> كعمولات لتطبيقات التوصيل وأدوات التغليف.</li>
+                <li><span class="memo-highlight">السيولة قيد التحصيل:</span> يوجد حالياً <span class="memo-code">${aggregator_hold:,.2f}</span> من صافي المبيعات قيد التحويل من شركات التوصيل (دورة تحصيل 7 إلى 14 يوماً).</li>
+            </ul>
+            <div class="memo-section-title">2. التوصيات التنفيذية لهندسة القائمة (BCG Matrix)</div>
+            <ul class="memo-list" style="padding-right:18px; padding-left:0;">
+                <li><span class="memo-highlight">حماية الأصناف عالية الربحية (Stars):</span> الأصناف (<em>{top_stars}</em>) تمثل الركيزة الأساسية للربح التشغيلي.</li>
+                <li><span class="memo-highlight">إعادة تسعير الأصناف منخفضة الهامش:</span> الأصناف (<em>{worst_items}</em>) تتآكل ربحيتها بسبب عمولة التوصيل. تعديل السعر بمقدار <span class="memo-code">+$1.25</span> سيضيف <span class="memo-code">+${est_monthly_recovery:,.2f} شهرياً</span> إلى صافي الأرباح.</li>
+            </ul>
+        </div>
+        """
+        wa_text = (
+            f"*التقرير المالي التنفيذي — {company_name} ({active_days} يوم)*\n\n"
+            f"• *إجمالي المبيعات:* ${total_gross:,.2f}\n"
+            f"• *صافي الأرباح التشغيلية (EBITDA):* ${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)\n"
+            f"• *نقطة التعادل اليومية:* ${daily_breakeven_sales:,.2f}\n"
+            f"• *عمولات التوصيل والتغليف:* -${total_fees_pkg:,.2f}\n"
+            f"• *السيولة المحتجزة لدى تطبيقات التوصيل:* ${aggregator_hold:,.2f}\n\n"
+            f"*خطة العمل الفورية:*\n"
+            f"1. *حماية الأصناف الرئيسية:* {top_stars}\n"
+            f"2. *تعديل أسعار الأصناف المستنزفة (+$1.25):* {worst_items} <- ربح إضافي متوقع: *+${est_monthly_recovery:,.2f} شهرياً*"
+        )
+        return html_card, wa_text
 
-    return f"""#### EXECUTIVE CFO AUDIT MEMO — {company_name.upper()} ({active_days}-Day Period)
-* **Normalized Gross POS Revenue:** `${total_gross:,.2f} USD` | **Operating EBITDA:** `${true_ebitda:,.2f} USD ({ebitda_margin_pct:.1f}%)`
-* **Daily Break-Even Threshold:** Operations require a minimum of **`${daily_breakeven_sales:,.2f} USD / day`** in gross revenue to cover fixed Rent, Payroll, and Utilities.
-* **Platform Commission & Packaging Leakage:** **`-${total_fees_pkg:,.2f} USD`** deducted by delivery aggregators, card terminals, and takeout packaging.
-* **Working Capital in Settlement Holds:** **`${aggregator_hold:,.2f} USD`** of net receivables is currently queued in 7–14 day aggregator settlement cycles.
-* **Menu Engineering Action Plan (BCG Matrix):**
-  1. **Protect Core Stars:** *{top_stars}* drive peak unit contribution. Maintain full pricing and primary menu placement.
-  2. **Reprice Underperforming SKUs:** *{worst_items}* fall below target contribution thresholds on delivery channels. A **+$1.25 USD** delivery price adjustment recovers **`+${est_monthly_recovery:,.2f} USD / month`** in net EBITDA."""
+    html_card = f"""
+    <div class="memo-card">
+        <div class="memo-header">
+            <h3 class="memo-title">EXECUTIVE CFO AUDIT MEMO — {company_name.upper()}</h3>
+            <span class="memo-meta">AUDIT WINDOW: {active_days} ACTIVE DAYS</span>
+        </div>
+        <div class="memo-grid">
+            <div class="memo-stat">
+                <div class="memo-stat-label">Gross POS Revenue</div>
+                <div class="memo-stat-val">${total_gross:,.2f}</div>
+            </div>
+            <div class="memo-stat">
+                <div class="memo-stat-label">Operating EBITDA</div>
+                <div class="memo-stat-val">${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)</div>
+            </div>
+            <div class="memo-stat">
+                <div class="memo-stat-label">Daily Break-Even</div>
+                <div class="memo-stat-val">${daily_breakeven_sales:,.2f} / day</div>
+            </div>
+            <div class="memo-stat">
+                <div class="memo-stat-label">Aggregator Hold</div>
+                <div class="memo-stat-val">${aggregator_hold:,.2f}</div>
+            </div>
+        </div>
+        <div class="memo-section-title">1. Cash Flow & Margin Leakage Findings</div>
+        <ul class="memo-list">
+            <li><span class="memo-highlight">Daily Break-Even Threshold:</span> Operations require a minimum of <span class="memo-code">${daily_breakeven_sales:,.2f} USD / day</span> in gross revenue to cover fixed Rent, Payroll, and Generator/Utilities.</li>
+            <li><span class="memo-highlight">Platform Commission & Packaging Leakage:</span> <span class="memo-code">-${total_fees_pkg:,.2f} USD</span> was deducted by delivery aggregators, card terminals, and takeout packaging during this window.</li>
+            <li><span class="memo-highlight">Working Capital in Settlement Holds:</span> <span class="memo-code">${aggregator_hold:,.2f} USD</span> of net receivables is currently queued in 7–14 day aggregator settlement cycles.</li>
+        </ul>
+        <div class="memo-section-title">2. Menu Engineering Action Plan (BCG Matrix)</div>
+        <ul class="memo-list">
+            <li><span class="memo-highlight">Protect Core Stars:</span> <em>{top_stars}</em> drive peak unit contribution. Maintain full pricing and primary menu placement without discounting.</li>
+            <li><span class="memo-highlight">Reprice Underperforming SKUs:</span> <em>{worst_items}</em> fall below target contribution thresholds on delivery channels. A <span class="memo-code">+$1.25 USD</span> delivery price adjustment recovers <span class="memo-code">+${est_monthly_recovery:,.2f} USD / month</span> in net operating EBITDA.</li>
+        </ul>
+    </div>
+    """
+    wa_text = (
+        f"*EXECUTIVE CFO AUDIT MEMO — {company_name.upper()} ({active_days}-Day Period)*\n\n"
+        f"• *Normalized Gross POS Revenue:* ${total_gross:,.2f} USD\n"
+        f"• *Operating EBITDA:* ${true_ebitda:,.2f} USD ({ebitda_margin_pct:.1f}%)\n"
+        f"• *Daily Break-Even Target:* ${daily_breakeven_sales:,.2f} USD / day\n"
+        f"• *Commissions & Packaging Leakage:* -${total_fees_pkg:,.2f} USD\n"
+        f"• *Working Capital in Aggregator Hold:* ${aggregator_hold:,.2f} USD\n\n"
+        f"*Menu Engineering Action Plan:*\n"
+        f"1. *Protect Core Stars:* {top_stars}\n"
+        f"2. *Reprice Underperformers (+$1.25):* {worst_items} -> Recovers *+${est_monthly_recovery:,.2f} USD / month* in net EBITDA."
+    )
+    return html_card, wa_text
 
 # ==============================================================================
 # MAIN AUTHENTICATED WORKSPACE
@@ -754,7 +987,7 @@ def main_portal():
     company_name = profile["company_name"]
 
     with st.sidebar:
-        st.markdown(f"**{company_name}**")
+        st.markdown(f"<div style='font-size:1.05rem; font-weight:700; color:#F8FAFC; margin-bottom:2px;'>{company_name}</div>", unsafe_allow_html=True)
         st.caption(f"Account: `{st.session_state.username}`")
 
         role = st.selectbox(
@@ -775,9 +1008,9 @@ def main_portal():
             fallback_cogs_pct = st.slider("Default COGS % (If Unmapped)", 5.0, 80.0, 32.0, 1.0) / 100.0
 
         with st.expander("3. Fixed Monthly OPEX", expanded=False):
-            monthly_rent = st.number_input("Monthly Rent ($)", min_value=0.0, value=float(profile.get("monthly_rent_usd", 3500.0)), step=100.0)
-            monthly_payroll = st.number_input("Monthly Payroll ($)", min_value=0.0, value=float(profile.get("monthly_payroll_usd", 6200.0)), step=100.0)
-            monthly_utilities = st.number_input("Generator & Utilities ($)", min_value=0.0, value=float(profile.get("monthly_generator_utilities_usd", 1400.0)), step=50.0)
+            monthly_rent = st.number_input("Monthly Rent ($)", min_value=0.0, value=float(profile.get("monthly_rent_usd", 1800.0)), step=100.0)
+            monthly_payroll = st.number_input("Monthly Payroll ($)", min_value=0.0, value=float(profile.get("monthly_payroll_usd", 2400.0)), step=100.0)
+            monthly_utilities = st.number_input("Generator & Utilities ($)", min_value=0.0, value=float(profile.get("monthly_generator_utilities_usd", 750.0)), step=50.0)
 
         st.divider()
         wa_msg = urllib.parse.quote("Hi Ryan, I reviewed the Executive POS & EBITDA Suite and would like to configure a custom audit for our branches.")
@@ -787,11 +1020,11 @@ def main_portal():
             st.session_state.authenticated = False
             st.rerun()
 
-    # Top Workspace Header & Control Bar
-    top_left, top_right = st.columns([2.2, 1.2])
+    # Top Workspace Header & Aligned Data Source Selector
+    top_left, top_right = st.columns([2.0, 1.4], vertical_alignment="center")
     with top_left:
         st.markdown(f"""
-        <div class="suite-header" style="border-bottom:none; margin-bottom:0.25rem; padding-bottom:0;">
+        <div style="margin-bottom:0.5rem;">
             <div class="suite-kicker">FINANCIAL OPERATIONS & AUDIT</div>
             <h1 class="suite-title">{company_name}</h1>
         </div>
@@ -955,9 +1188,9 @@ def main_portal():
     k3.metric("COGS & Waste", f"-${total_cogs_waste:,.2f}")
     k4.metric("Contribution Profit", f"${contrib_profit:,.2f}")
     k5.metric(f"Prorated OPEX ({active_days}d)", f"-${prorated_total_opex:,.2f}")
-    k6.metric("Operating EBITDA", f"${true_ebitda:,.2f}", f"{ebitda_margin_pct:.1f}% margin")
+    k6.metric("Operating EBITDA", f"${true_ebitda:,.2f}", f"{ebitda_margin_pct:+.1f}% margin")
 
-    bar_left, bar_right = st.columns([3, 1.2])
+    bar_left, bar_right = st.columns([3, 1.2], vertical_alignment="center")
     with bar_left:
         st.caption(f"Normalized ledger across {active_days} active day(s) at {lbp_rate:,.0f} LBP/USD.")
     with bar_right:
@@ -1166,19 +1399,19 @@ def main_portal():
             }
         )
 
-    # TAB 6: EXECUTIVE MEMO
+    # TAB 6: EXECUTIVE MEMO (STRUCTURED HTML CARD)
     with tab6:
         memo_lang = st.radio("Memo Language", ["English", "Français", "العربية"], horizontal=True)
         aggregator_hold_val = cleaned_df[cleaned_df["Channel"] == "Delivery Aggregators"]["Net_Revenue_USD"].sum()
 
-        memo_text = generate_cfo_memo(
+        memo_html, memo_wa_text = build_cfo_memo_content(
             memo_lang, company_name, active_days, total_gross, total_fees_pkg,
             true_ebitda, ebitda_margin_pct, daily_breakeven_sales,
             sku_matrix, aggregator_hold_val
         )
-        st.markdown(f'<div class="exec-banner">{memo_text}</div>', unsafe_allow_html=True)
+        st.markdown(memo_html, unsafe_allow_html=True)
 
-        wa_summary_url = f"https://wa.me/?text={urllib.parse.quote(memo_text)}"
+        wa_summary_url = f"https://wa.me/?text={urllib.parse.quote(memo_wa_text)}"
         st.link_button("Forward Executive Memo via WhatsApp", url=wa_summary_url, type="primary")
 
 if not st.session_state.authenticated:
