@@ -7,11 +7,10 @@ import pandas as pd
 import streamlit as st
 
 # ==============================================================================
-# PAGE CONFIGURATION & OWNER CONTACT
+# PAGE CONFIGURATION & INSTITUTIONAL DESIGN SYSTEM
 # ==============================================================================
 st.set_page_config(
-    page_title="Executive POS, EBITDA & Fraud Audit Suite v4.0",
-    page_icon="📊",
+    page_title="Financial & POS Reconciliation Suite",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -19,13 +18,132 @@ st.set_page_config(
 OWNER_WHATSAPP = "96170773186"
 OWNER_EMAIL = "ryankhreiss@gmail.com"
 
+def apply_institutional_theme():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        html, body, [class*="css"] {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #0F172A;
+        }
+
+        #MainMenu, footer {visibility: hidden;}
+        header {background: transparent !important;}
+
+        .block-container {
+            padding-top: 1.5rem;
+            padding-bottom: 3rem;
+            max-width: 1440px;
+        }
+
+        /* Header Bar */
+        .suite-header {
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 0.85rem;
+            margin-bottom: 1.25rem;
+        }
+        .suite-kicker {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748B;
+            margin-bottom: 0.2rem;
+        }
+        .suite-title {
+            font-size: 1.55rem;
+            font-weight: 700;
+            color: #0F172A;
+            letter-spacing: -0.02em;
+            margin: 0;
+        }
+        .suite-subtitle {
+            font-size: 0.85rem;
+            color: #475569;
+            margin-top: 0.2rem;
+        }
+
+        /* Metric Cards */
+        div[data-testid="stMetric"] {
+            background-color: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            padding: 14px 16px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+        }
+        div[data-testid="stMetricLabel"] > div {
+            font-size: 0.72rem !important;
+            font-weight: 600 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #64748B !important;
+        }
+        div[data-testid="stMetricValue"] > div {
+            font-size: 1.4rem !important;
+            font-weight: 700 !important;
+            color: #0F172A !important;
+            letter-spacing: -0.02em;
+        }
+
+        /* Navigation Tabs */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 24px;
+            border-bottom: 1px solid #E2E8F0;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 42px;
+            font-size: 0.84rem;
+            font-weight: 500;
+            color: #64748B;
+            padding: 0 4px;
+            background-color: transparent;
+        }
+        .stTabs [aria-selected="true"] {
+            color: #0F172A !important;
+            font-weight: 600 !important;
+            border-bottom: 2px solid #0F172A !important;
+        }
+
+        /* Sidebar */
+        section[data-testid="stSidebar"] {
+            background-color: #F8FAFC;
+            border-right: 1px solid #E2E8F0;
+        }
+
+        /* Callout Banners */
+        .exec-banner {
+            background-color: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-left: 3px solid #0F172A;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 1rem;
+            font-size: 0.86rem;
+            color: #1E293B;
+        }
+        .exec-banner-warn {
+            background-color: #FEF2F2;
+            border: 1px solid #FECACA;
+            border-left: 3px solid #DC2626;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 1rem;
+            font-size: 0.86rem;
+            color: #7F1D1D;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+apply_institutional_theme()
+
 # ==============================================================================
-# MULTI-TENANT CLIENT ACCOUNTS (WITH OPEX, PACKAGING & AUDIT DEFAULTS)
+# MULTI-TENANT CLIENT PROFILES
 # ==============================================================================
 DEFAULT_CLIENTS = {
     "demo": {
         "password": "demo123",
-        "company_name": "Beirut Hospitality Group (Live Demo)",
+        "company_name": "Beirut Hospitality Group",
         "default_lbp_rate": 89500.0,
         "delivery_fee_pct": 25.0,
         "card_fee_pct": 2.0,
@@ -75,27 +193,35 @@ if not st.session_state.authenticated and query_params.get("demo", "").lower() i
     st.session_state.client_profile = clients["demo"]
 
 def login_screen():
-    col1, col2, col3 = st.columns([1, 1.5, 1])
+    st.write("")
+    st.write("")
+    col1, col2, col3 = st.columns([1.2, 1.4, 1.2])
     with col2:
-        st.markdown("## 📊 Executive POS, Menu Engineering & Fraud Audit Suite")
-        st.caption(
-            "Enterprise v4.0 — Convert raw POS exports (Omega, Bim, Foodics, Square) into a 5-tab Executive Excel Workbook "
-            "with BCG Menu Engineering, Price-Elasticity Simulation, Void/Theft Detection, Cash Drawer Audits, and True EBITDA."
-        )
+        st.markdown("""
+        <div class="suite-header">
+            <div class="suite-kicker">FINANCIAL ANALYTICS & RECONCILIATION</div>
+            <h1 class="suite-title">Executive POS & EBITDA Suite</h1>
+            <div class="suite-subtitle">Multi-currency normalization, aggregator fee auditing, menu engineering, and shift reconciliation.</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        if st.button("🚀 Launch Instant Interactive Demo (No Password Needed)", type="primary", use_container_width=True):
+        if st.button("Launch Interactive Demo Environment", type="primary", use_container_width=True):
             clients = get_client_db()
             st.session_state.authenticated = True
             st.session_state.username = "demo"
             st.session_state.client_profile = clients["demo"]
             st.rerun()
 
-        st.markdown("<div style='text-align:center; color:#64748b; margin: 10px 0;'>— OR SIGN IN TO PRIVATE CLIENT PORTAL —</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='text-align:center; color:#94A3B8; font-size:0.72rem; margin: 18px 0; "
+            "text-transform:uppercase; letter-spacing:0.08em;'>Client Portal Authentication</div>",
+            unsafe_allow_html=True
+        )
 
         with st.form("login_form"):
-            username = st.text_input("Client Username", placeholder="e.g., demo").strip().lower()
-            password = st.text_input("Password", type="password", placeholder="Enter password")
-            submit = st.form_submit_button("Sign In to Private Portal", use_container_width=True)
+            username = st.text_input("Client Identifier", placeholder="demo").strip().lower()
+            password = st.text_input("Password", type="password", placeholder="••••••••")
+            submit = st.form_submit_button("Sign In", use_container_width=True)
 
             if submit:
                 clients = get_client_db()
@@ -105,10 +231,10 @@ def login_screen():
                     st.session_state.client_profile = clients[username]
                     st.rerun()
                 else:
-                    st.error("Invalid username or password. Click the blue Instant Demo button above to preview.")
+                    st.error("Invalid credentials. Use the button above to launch the demo environment.")
 
 # ==============================================================================
-# CRASH-PROOF EXCEL (.XLSX) & CSV READER
+# FILE PARSING & DATA NORMALIZATION
 # ==============================================================================
 def safe_read_file(uploaded_file) -> pd.DataFrame:
     filename = uploaded_file.name.lower()
@@ -168,15 +294,15 @@ def clean_numeric_series(series: pd.Series, default_val: float = 0.0) -> pd.Seri
 def classify_channel_and_fee(raw_channel: str, delivery_fee: float, card_fee: float, whish_fee: float):
     c = str(raw_channel).strip().lower()
     if any(k in c for k in ["toter", "talabat", "deliveroo", "careem", "noon", "zomato", "jahez", "hunger", "aggregat", "delivery"]):
-        return "Toters / Delivery Apps", delivery_fee, True
+        return "Delivery Aggregators", delivery_fee, True
     if any(k in c for k in ["whish", "wish", "omt", "bob", "wallet"]):
-        return "Whish / Mobile Wallet", whish_fee, False
+        return "Digital Wallet (Whish)", whish_fee, False
     if any(k in c for k in ["card", "visa", "master", "amex", "pos", "bank", "carte", "credit", "debit"]):
-        return "Bank Card POS", card_fee, False
+        return "Card POS Terminal", card_fee, False
     return "In-Store Cash", 0.0, False
 
 # ==============================================================================
-# SAMPLE DATA GENERATOR (WITH REALISTIC DISCOUNT & VOID ANOMALIES)
+# SAMPLE DATA GENERATOR
 # ==============================================================================
 @st.cache_data
 def generate_sample_datasets(lbp_rate: float):
@@ -185,14 +311,14 @@ def generate_sample_datasets(lbp_rate: float):
         {"SKU": "SKU-102", "Item_Name": "Crispy Chicken Sliders", "Category": "Mains", "Unit_Cost_USD": 4.80, "Menu_Price_USD": 9.50},
         {"SKU": "SKU-103", "Item_Name": "Artisanal Kale & Quinoa Salad", "Category": "Salads", "Unit_Cost_USD": 2.40, "Menu_Price_USD": 11.00},
         {"SKU": "SKU-104", "Item_Name": "Loaded Parmesan Fries", "Category": "Sides", "Unit_Cost_USD": 1.10, "Menu_Price_USD": 5.50},
-        {"SKU": "SKU-105", "Item_Name": "Combo Meal Box (Delivery Promo)", "Category": "Promos", "Unit_Cost_USD": 8.90, "Menu_Price_USD": 13.00},
+        {"SKU": "SKU-105", "Item_Name": "Combo Meal Box (Aggregator Promo)", "Category": "Promos", "Unit_Cost_USD": 8.90, "Menu_Price_USD": 13.00},
         {"SKU": "SKU-106", "Item_Name": "Specialty Iced Matcha Latte", "Category": "Beverages", "Unit_Cost_USD": 1.30, "Menu_Price_USD": 5.50},
     ]
     cogs_df = pd.DataFrame(cogs_data)
     sku_weights = [0.24, 0.22, 0.07, 0.19, 0.18, 0.10]
 
-    branches = ["Ashrafieh Branch", "Mar Mikhael Branch", "Dbayeh Branch"]
-    cashiers = ["Cashier_Nabil", "Cashier_Maya", "Cashier_Rami", "Aggregator_Auto"]
+    branches = ["Ashrafieh Flagship", "Mar Mikhael Branch", "Dbayeh Highway"]
+    cashiers = ["Nabil K.", "Maya S.", "Rami H.", "System_Aggregator"]
     channels = ["In-Store Cash", "Whish Money", "Bank Card POS", "Toters Delivery", "Talabat / Deliveroo"]
     channel_weights = [0.30, 0.18, 0.15, 0.25, 0.12]
 
@@ -205,16 +331,15 @@ def generate_sample_datasets(lbp_rate: float):
         qty = random.choices([1, 2, 3, 4], weights=[0.55, 0.30, 0.10, 0.05])[0]
         channel = random.choices(channels, weights=channel_weights)[0]
         branch = random.choice(branches)
-        cashier = "Aggregator_Auto" if "Toters" in channel or "Talabat" in channel else random.choice(cashiers[:3])
+        cashier = "System_Aggregator" if "Toters" in channel or "Talabat" in channel else random.choice(cashiers[:3])
         tx_date = start_date + timedelta(days=random.randint(0, 14))
         date_str = tx_date.strftime("%Y-%m-%d")
 
         is_lbp = (channel == "In-Store Cash") and (random.random() < 0.35)
         list_gross_usd = sku_info["Menu_Price_USD"] * qty
 
-        # Inject realistic suspicious discount/void pattern on Cashier_Rami in Mar Mikhael
         discount_usd = 0.0
-        if cashier == "Cashier_Rami" and channel == "In-Store Cash" and random.random() < 0.28:
+        if cashier == "Rami H." and channel == "In-Store Cash" and random.random() < 0.28:
             discount_usd = round(list_gross_usd * random.choice([0.25, 0.50, 1.0]), 2)
         elif random.random() < 0.04:
             discount_usd = round(list_gross_usd * 0.10, 2)
@@ -240,7 +365,7 @@ def generate_sample_datasets(lbp_rate: float):
     return pd.DataFrame(rows), cogs_df
 
 # ==============================================================================
-# CORE FINANCIAL, PACKAGING, WASTE, INFLATION & BCG MATRIX ENGINE
+# CORE FINANCIAL & BCG MATRIX ENGINE
 # ==============================================================================
 def process_standardized_data(
     std_pos: pd.DataFrame,
@@ -253,7 +378,7 @@ def process_standardized_data(
     waste_pct: float,
     supplier_inflation_pct: float,
     fallback_cogs_pct: float
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     df = std_pos.copy()
     parsed_dates = pd.to_datetime(df["Date"], format="mixed", dayfirst=True, errors="coerce")
     df["Clean_Date"] = parsed_dates.dt.strftime("%Y-%m-%d").fillna(datetime.today().strftime("%Y-%m-%d"))
@@ -275,11 +400,6 @@ def process_standardized_data(
         return amt
 
     df["Gross_Sales_USD"] = df.apply(calc_usd, axis=1)
-
-    # Separate Voided / 100% Comped Tickets for Fraud Audit before filtering active sales
-    void_or_discount_df = df[(df["Gross_Sales_USD"] <= 0.01) | (df["Discount_USD"] > 0)].copy()
-
-    # Keep positive revenue rows for P&L
     df = df[df["Gross_Sales_USD"] > 0].copy()
     df["Unit_Cost_USD"] = None
     df["Category"] = "General"
@@ -310,7 +430,6 @@ def process_standardized_data(
     df.loc[unmatched, "Raw_COGS_USD"] = df.loc[unmatched, "Gross_Sales_USD"] * fallback_cogs_pct
     df.loc[unmatched, "Unit_Cost_USD"] = df.loc[unmatched, "Raw_COGS_USD"] / df.loc[unmatched, "Quantity"]
 
-    # Apply Supplier Cost Inflation Stress-Test + Kitchen Waste Allowance
     df["Raw_COGS_USD"] = df["Raw_COGS_USD"] * (1.0 + supplier_inflation_pct)
     df["Waste_Cost_USD"] = df["Raw_COGS_USD"] * waste_pct
     df["Total_COGS_USD"] = df["Raw_COGS_USD"] + df["Waste_Cost_USD"]
@@ -326,7 +445,7 @@ def process_standardized_data(
     df["Net_Profit_USD"] = df["Net_Revenue_USD"] - df["Total_COGS_USD"] - df["Packaging_Cost_USD"]
     df["Net_Margin_Pct"] = df["Net_Profit_USD"] / df["Gross_Sales_USD"]
 
-    return df, void_or_discount_df
+    return df
 
 def build_bcg_menu_matrix(df: pd.DataFrame) -> pd.DataFrame:
     sku_df = df.groupby(["SKU", "Item_Name", "Category"], as_index=False).agg(
@@ -348,18 +467,18 @@ def build_bcg_menu_matrix(df: pd.DataFrame) -> pd.DataFrame:
         high_vol = row["Units_Sold"] >= avg_units
         high_prof = row["Unit_Contribution_USD"] >= avg_contrib and row["Margin_Pct"] >= 25.0
         if high_vol and high_prof:
-            return "⭐ STAR (High Vol / High Margin)"
+            return "STAR — Protect & Feature"
         if high_vol and not high_prof:
-            return "🐴 PLOWHORSE (High Vol / Low Margin - Reprice!)"
+            return "PLOWHORSE — Reprice (+USD)"
         if not high_vol and high_prof:
-            return "🧩 PUZZLE (Low Vol / High Margin - Promote!)"
-        return "💀 DOG / BLEEDER (Low Vol / Low Margin - Cut/Fix)"
+            return "PUZZLE — Increase Visibility"
+        return "UNDERPERFORMER — Review / Cut"
 
-    sku_df["BCG_Matrix_Class"] = sku_df.apply(classify_bcg, axis=1)
+    sku_df["Classification"] = sku_df.apply(classify_bcg, axis=1)
     return sku_df.sort_values("Net_Profit_USD", ascending=False)
 
 # ==============================================================================
-# 5-TAB EXECUTIVE EXCEL WORKBOOK BUILDER
+# EXCEL WORKBOOK GENERATOR
 # ==============================================================================
 def build_excel_in_memory(
     df: pd.DataFrame,
@@ -403,12 +522,12 @@ def build_excel_in_memory(
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter", engine_kwargs={"options": {"in_memory": True}}) as writer:
         wb = writer.book
-        title_fmt = wb.add_format({"bold": True, "font_size": 15, "font_color": "#0F172A"})
+        title_fmt = wb.add_format({"bold": True, "font_size": 14, "font_color": "#0F172A"})
         subtitle_fmt = wb.add_format({"italic": True, "font_size": 10, "font_color": "#475569"})
-        header_fmt = wb.add_format({"bold": True, "bg_color": "#1E293B", "font_color": "#FFFFFF", "border": 1, "align": "center"})
-        kpi_label_fmt = wb.add_format({"bold": True, "bg_color": "#F1F5F9", "font_color": "#334155", "border": 1, "align": "center"})
+        header_fmt = wb.add_format({"bold": True, "bg_color": "#0F172A", "font_color": "#FFFFFF", "border": 1, "align": "center"})
+        kpi_label_fmt = wb.add_format({"bold": True, "bg_color": "#F8FAFC", "font_color": "#475569", "border": 1, "align": "center"})
         kpi_val_fmt = wb.add_format({"bold": True, "font_size": 12, "bg_color": "#FFFFFF", "font_color": "#0F172A", "num_format": "$#,##0.00", "border": 1, "align": "center"})
-        kpi_pct_fmt = wb.add_format({"bold": True, "font_size": 12, "bg_color": "#FFFFFF", "font_color": "#16A34A", "num_format": "0.0%", "border": 1, "align": "center"})
+        kpi_pct_fmt = wb.add_format({"bold": True, "font_size": 12, "bg_color": "#FFFFFF", "font_color": "#0F172A", "num_format": "0.0%", "border": 1, "align": "center"})
         usd_fmt = wb.add_format({"num_format": "$#,##0.00", "border": 1})
         pct_fmt = wb.add_format({"num_format": "0.0%", "border": 1})
         int_fmt = wb.add_format({"num_format": "#,##0", "border": 1})
@@ -417,11 +536,10 @@ def build_excel_in_memory(
         alert_green_fmt = wb.add_format({"bg_color": "#DCFCE7", "font_color": "#166534", "bold": True, "border": 1})
         alert_warn_fmt = wb.add_format({"bg_color": "#FEF3C7", "font_color": "#92400E", "bold": True, "border": 1})
 
-        # TAB 1: EXECUTIVE SUMMARY
         ws_exec = wb.add_worksheet("01_Executive_Summary")
         ws_exec.hide_gridlines(2)
-        ws_exec.write("B2", f"{company_name.upper()} — EXECUTIVE FINANCIAL & EBITDA DASHBOARD", title_fmt)
-        ws_exec.write("B3", f"Normalized to Fresh USD (Rate: {lbp_rate:,.0f} LBP/USD | Active Days: {prorated_opex['days']})", subtitle_fmt)
+        ws_exec.write("B2", f"{company_name.upper()} — EXECUTIVE FINANCIAL SUMMARY", title_fmt)
+        ws_exec.write("B3", f"Normalized to USD (Rate: {lbp_rate:,.0f} LBP/USD | Active Days: {prorated_opex['days']})", subtitle_fmt)
 
         total_gross = df["Gross_Sales_USD"].sum()
         total_fees_pkg = df["Platform_Fee_USD"].sum() + df["Packaging_Cost_USD"].sum()
@@ -432,10 +550,10 @@ def build_excel_in_memory(
 
         kpis = [
             ("GROSS REVENUE", total_gross, kpi_val_fmt),
-            ("FEES + PACKAGING", total_fees_pkg, kpi_val_fmt),
-            ("COGS + WASTE", total_cogs, kpi_val_fmt),
+            ("FEES & PACKAGING", total_fees_pkg, kpi_val_fmt),
+            ("COGS & WASTE", total_cogs, kpi_val_fmt),
             ("PRORATED OPEX", prorated_opex["total_opex"], kpi_val_fmt),
-            ("TRUE EBITDA", ebitda_val, kpi_val_fmt),
+            ("OPERATING EBITDA", ebitda_val, kpi_val_fmt),
             ("EBITDA MARGIN", ebitda_margin, kpi_pct_fmt),
         ]
         for idx, (label, val, fmt) in enumerate(kpis):
@@ -444,7 +562,7 @@ def build_excel_in_memory(
             ws_exec.merge_range(5, col, 5, col + 1, val, fmt)
 
         start_row = 8
-        ws_exec.write(start_row - 1, 1, "1. Channel Contribution Breakdown (Net of Fees, Packaging & Waste)", title_fmt)
+        ws_exec.write(start_row - 1, 1, "1. Channel Performance Breakdown", title_fmt)
         for col_idx, col_name in enumerate(channel_summary.columns):
             ws_exec.write(start_row, 1 + col_idx, col_name.replace("_", " "), header_fmt)
 
@@ -476,10 +594,9 @@ def build_excel_in_memory(
             ws_exec.write(r_idx, 8, row.Margin_Pct, pct_fmt)
         ws_exec.set_column("B:M", 18)
 
-        # TAB 2: BCG MENU ENGINEERING MATRIX
         ws_sku = wb.add_worksheet("02_BCG_Menu_Matrix")
         ws_sku.hide_gridlines(2)
-        ws_sku.write("B2", "BOSTON MATRIX MENU ENGINEERING (POPULARITY VS. CONTRIBUTION)", title_fmt)
+        ws_sku.write("B2", "MENU ENGINEERING MATRIX (VOLUME VS. CONTRIBUTION MARGIN)", title_fmt)
         for col_idx, col_name in enumerate(sku_matrix.columns):
             ws_sku.write(4, 1 + col_idx, col_name.replace("_", " "), header_fmt)
 
@@ -496,22 +613,20 @@ def build_excel_in_memory(
             ws_sku.write(r_idx, 10, row.Avg_Unit_Price_USD, usd_fmt)
             ws_sku.write(r_idx, 11, row.Unit_Contribution_USD, usd_fmt)
             ws_sku.write(r_idx, 12, row.Margin_Pct / 100.0, pct_fmt)
-            style = alert_green_fmt if "STAR" in row.BCG_Matrix_Class else (
-                alert_red_fmt if "DOG" in row.BCG_Matrix_Class else alert_warn_fmt
+            style = alert_green_fmt if "STAR" in row.Classification else (
+                alert_red_fmt if "UNDERPERFORMER" in row.Classification else alert_warn_fmt
             )
-            ws_sku.write(r_idx, 13, row.BCG_Matrix_Class, style)
+            ws_sku.write(r_idx, 13, row.Classification, style)
         ws_sku.set_column("B:N", 22)
 
-        # TAB 3: DAILY PAYOUT RECONCILIATION
         daily_recon.to_excel(writer, sheet_name="03_Daily_Payout_Recon", index=False, startrow=3, startcol=1)
         ws_recon = writer.sheets["03_Daily_Payout_Recon"]
         ws_recon.hide_gridlines(2)
-        ws_recon.write("B2", "DAILY EXPECTED NET PAYOUT RECONCILIATION (NET OF FEES)", title_fmt)
+        ws_recon.write("B2", "DAILY EXPECTED NET PAYOUT SCHEDULE", title_fmt)
         for col_idx, col_name in enumerate(daily_recon.columns):
             ws_recon.write(3, 1 + col_idx, col_name.replace("_", " "), header_fmt)
         ws_recon.set_column("B:I", 22)
 
-        # TAB 4: CLEAN MASTER LEDGER
         df.to_excel(writer, sheet_name="04_Clean_Master_Ledger", index=False)
         ws_raw = writer.sheets["04_Clean_Master_Ledger"]
         ws_raw.set_column("A:S", 18)
@@ -519,7 +634,7 @@ def build_excel_in_memory(
     return output.getvalue()
 
 # ==============================================================================
-# MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR (EN / FR / AR)
+# MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR (NO EMOJIS)
 # ==============================================================================
 def generate_cfo_memo(
     lang: str,
@@ -527,127 +642,139 @@ def generate_cfo_memo(
     active_days: int,
     total_gross: float,
     total_fees_pkg: float,
-    contrib_profit: float,
     true_ebitda: float,
     ebitda_margin_pct: float,
     daily_breakeven_sales: float,
     sku_matrix: pd.DataFrame,
     aggregator_hold: float
 ) -> str:
-    bleeders = sku_matrix[sku_matrix["BCG_Matrix_Class"].str.contains("PLOWHORSE|DOG")]
+    bleeders = sku_matrix[sku_matrix["Classification"].str.contains("PLOWHORSE|UNDERPERFORMER")]
     worst_items = ", ".join(bleeders["Item_Name"].head(2).tolist()) if not bleeders.empty else "None"
-    top_stars = ", ".join(sku_matrix[sku_matrix["BCG_Matrix_Class"].str.contains("STAR")]["Item_Name"].head(2).tolist()) or "Core Menu"
+    top_stars = ", ".join(sku_matrix[sku_matrix["Classification"].str.contains("STAR")]["Item_Name"].head(2).tolist()) or "Core Menu"
     est_monthly_recovery = (bleeders["Units_Sold"].sum() * 1.25 * (30.0 / active_days)) if not bleeders.empty else 0.0
 
     if lang == "Français":
-        return f"""### 📋 NOTE D'AUDIT EXÉCUTIF CFO — {company_name.upper()} ({active_days} Jours)
-* **Chiffre d'Affaires Brut Normalisé :** `${total_gross:,.2f} USD` | **EBITDA Réel (Net d'OPEX) :** `${true_ebitda:,.2f} USD ({ebitda_margin_pct:.1f}%)`
-* **Seuil de Rentabilité Quotidien (Point Mort) :** Votre établissement doit générer au minimum **`${daily_breakeven_sales:,.2f} USD / jour`** de ventes brutes pour couvrir le loyer, les salaires et le générateur/électricité.
-* **Fuite Commissions & Emballages Livraison :** **`-${total_fees_pkg:,.2f} USD`** absorbés par les commissions (Toters/Talabat/Cartes) et coûts d'emballage sur la période.
-* **Trésorerie Bloquée (Besoin en Fonds de Roulement) :** **`${aggregator_hold:,.2f} USD`** de recettes nettes sont actuellement retenus par les plateformes de livraison (délai de règlement de 7 à 14 jours).
-* **Plan d'Action Menu Engineering (Matrice BCG) :**
-  1. **Protéger vos Stars :** *{top_stars}* génèrent l'essentiel de votre marge nette. Ne jamais appliquer de remises promotionnelles dessus.
-  2. **Revaloriser vos Plowhorses / Dogs :** *{worst_items}* détruisent votre marge sur les applications de livraison. Une hausse ciblée de **+$1.25 USD** sur ces articles récupérera **`+${est_monthly_recovery:,.2f} USD / mois`** de profit net direct."""
+        return f"""#### NOTE D'AUDIT EXÉCUTIF — {company_name.upper()} ({active_days} Jours)
+* **Chiffre d'Affaires Brut Normalisé :** `${total_gross:,.2f} USD` | **EBITDA Opérationnel :** `${true_ebitda:,.2f} USD ({ebitda_margin_pct:.1f}%)`
+* **Seuil de Rentabilité Quotidien :** L'établissement doit générer au minimum **`${daily_breakeven_sales:,.2f} USD / jour`** pour couvrir les charges fixes (loyer, salaires, énergie).
+* **Commissions & Emballages :** **`-${total_fees_pkg:,.2f} USD`** absorbés par les plateformes de livraison, terminaux TPE et coûts d'emballage.
+* **Trésorerie en Attente de Règlement :** **`${aggregator_hold:,.2f} USD`** de recettes nettes sont actuellement retenus par les agrégateurs (délai de 7 à 14 jours).
+* **Recommandations Stratégiques (Matrice BCG) :**
+  1. **Protéger les Produits Leaders (Stars) :** *{top_stars}* génèrent la plus forte contribution unitaire. Maintenir les prix pleins sans remise.
+  2. **Ajustement Tarifaire Ciblé :** *{worst_items}* présentent une marge insuffisante après commission. Une hausse de **+$1.25 USD** sur les applications de livraison générera **`+${est_monthly_recovery:,.2f} USD / mois`** d'EBITDA additionnel."""
 
     if lang == "العربية":
-        return f"""### 📋 التقرير المالي التنفيذي وتدقيق الربحية — {company_name} ({active_days} يوم)
-* **إجمالي المبيعات (بالدولار الفريش):** `${total_gross:,.2f}` | **صافي الأرباح التشغيلية الفعلية (EBITDA):** `${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)`
-* **نقطة التعادل اليومية (Break-Even):** يحتاج الفرع إلى تحقيق مبيعات يومية لا تقل عن **`${daily_breakeven_sales:,.2f} في اليوم`** لتغطية الإيجار، الرواتب، واشتراك المولد/الكهرباء.
-* **عمولات التوصيل وتكلفة التغليف:** تم اقتطاع **`-${total_fees_pkg:,.2f}`** كعمولات لتطبيقات التوصيل (Toters / Talabat) وأكياس/علب التغليف.
-* **السيولة المحتجزة لدى شركات التوصيل:** يوجد حالياً **`${aggregator_hold:,.2f}`** من صافي أرباحك قيد التحصيل (تأخير الدفع من 7 إلى 14 يوماً).
-* **خطة العمل الفورية لهندسة القائمة (BCG Matrix):**
-  1. **حماية الأصناف الذهبية (Stars):** الأصناف (*{top_stars}*) هي المحرك الأساسي للربح الصافي.
-  2. **تعديل أسعار الأصناف المستنزفة للربح:** الأصناف (*{worst_items}*) تحقق هامش ربح منخفض جداً بعد عمولة التوصيل. رفع سعرها بمقدار **+$1.25** فقط على تطبيقات التوصيل سيعيد لخزينتك **`+${est_monthly_recovery:,.2f} شهرياً`** كأرباح صافية."""
+        return f"""#### الملخص المالي التنفيذي — {company_name} ({active_days} يوم)
+* **إجمالي المبيعات (بالدولار الفريش):** `${total_gross:,.2f}` | **صافي الأرباح التشغيلية (EBITDA):** `${true_ebitda:,.2f} ({ebitda_margin_pct:.1f}%)`
+* **نقطة التعادل اليومية:** يحتاج الفرع إلى تحقيق مبيعات يومية لا تقل عن **`${daily_breakeven_sales:,.2f} في اليوم`** لتغطية المصاريف الثابتة (الإيجار، الرواتب، الطاقة).
+* **عمولات التوصيل وتكلفة التغليف:** تم اقتطاع **`-${total_fees_pkg:,.2f}`** كعمولات لتطبيقات التوصيل وأدوات التغليف.
+* **السيولة المحتجزة قيد التحصيل:** يوجد حالياً **`${aggregator_hold:,.2f}`** من صافي المبيعات قيد التحويل من شركات التوصيل (دورة تحصيل من 7 إلى 14 يوماً).
+* **التوصيات التنفيذية لهندسة القائمة:**
+  1. **حماية الأصناف عالية الربحية (Stars):** الأصناف (*{top_stars}*) تمثل الركيزة الأساسية للربح التشغيلي.
+  2. **إعادة تسعير الأصناف منخفضة الهامش:** الأصناف (*{worst_items}*) تتآكل ربحيتها بسبب عمولة التوصيل. تعديل السعر بمقدار **+$1.25** سيضيف **`+${est_monthly_recovery:,.2f} شهرياً`** إلى صافي الأرباح."""
 
-    return f"""### 📋 EXECUTIVE CFO AUDIT MEMO — {company_name.upper()} ({active_days}-Day Period)
-* **Normalized Gross POS Revenue:** `${total_gross:,.2f} USD` | **True Operating EBITDA (Net of OPEX):** `${true_ebitda:,.2f} USD ({ebitda_margin_pct:.1f}%)`
-* **Daily Break-Even Revenue Threshold:** Your operation requires a minimum of **`${daily_breakeven_sales:,.2f} USD / day`** in gross sales just to cover fixed Rent, Staff Payroll, and Generator/EDL utilities.
-* **Platform Commission & Packaging Leakage:** **`-${total_fees_pkg:,.2f} USD`** was deducted by delivery aggregators, POS card fees, and takeout packaging during this window.
-* **Working Capital Locked in Settlement Holds:** **`${aggregator_hold:,.2f} USD`** of your net revenue is currently sitting in 7–14 day aggregator payout queues.
-* **Immediate Menu Engineering Action Plan (BCG Matrix):**
-  1. **Protect Your Stars:** *{top_stars}* drive your highest unit contribution. Keep them at full price and top visual placement.
-  2. **Reprice Plowhorses & Bleeders:** *{worst_items}* fall below safe margin thresholds after delivery fees and packaging. Repricing them by **+$1.25 USD** on delivery apps recovers **`+${est_monthly_recovery:,.2f} USD / month`** in pure bottom-line EBITDA."""
+    return f"""#### EXECUTIVE CFO AUDIT MEMO — {company_name.upper()} ({active_days}-Day Period)
+* **Normalized Gross POS Revenue:** `${total_gross:,.2f} USD` | **Operating EBITDA:** `${true_ebitda:,.2f} USD ({ebitda_margin_pct:.1f}%)`
+* **Daily Break-Even Threshold:** Operations require a minimum of **`${daily_breakeven_sales:,.2f} USD / day`** in gross revenue to cover fixed Rent, Payroll, and Utilities.
+* **Platform Commission & Packaging Leakage:** **`-${total_fees_pkg:,.2f} USD`** deducted by delivery aggregators, card terminals, and takeout packaging.
+* **Working Capital in Settlement Holds:** **`${aggregator_hold:,.2f} USD`** of net receivables is currently queued in 7–14 day aggregator settlement cycles.
+* **Menu Engineering Action Plan (BCG Matrix):**
+  1. **Protect Core Stars:** *{top_stars}* drive peak unit contribution. Maintain full pricing and primary menu placement.
+  2. **Reprice Underperforming SKUs:** *{worst_items}* fall below target contribution thresholds on delivery channels. A **+$1.25 USD** delivery price adjustment recovers **`+${est_monthly_recovery:,.2f} USD / month`** in net EBITDA."""
 
 # ==============================================================================
-# MAIN AUTHENTICATED PORTAL VIEW
+# MAIN AUTHENTICATED WORKSPACE
 # ==============================================================================
 def main_portal():
     profile = st.session_state.client_profile
     company_name = profile["company_name"]
 
+    # Clean Grouped Sidebar
     with st.sidebar:
-        st.markdown(f"### 🏢 {company_name}")
+        st.markdown(f"**{company_name}**")
+        st.caption(f"Account: `{st.session_state.username}`")
+
         role = st.selectbox(
-            "👤 Active User Role (RBAC):",
-            ["CFO / Owner (Full Access)", "Branch Manager (Cash & Shift Recon Only)"]
+            "Access Role",
+            ["CFO / Executive View", "Branch Manager (Cash Recon)"]
         )
+
+        with st.expander("1. FX & Channel Fees", expanded=True):
+            lbp_rate = st.number_input("LBP / USD Exchange Rate", min_value=1000.0, max_value=500000.0, value=float(profile.get("default_lbp_rate", 89500.0)), step=500.0)
+            delivery_fee = st.slider("Aggregator Commission (%)", 0.0, 40.0, float(profile.get("delivery_fee_pct", 25.0)), 0.5) / 100.0
+            packaging_cost_usd = st.number_input("Delivery Packaging / Unit ($)", min_value=0.0, max_value=5.0, value=float(profile.get("packaging_cost_usd", 0.65)), step=0.05)
+            card_fee = st.slider("Card POS Fee (%)", 0.0, 10.0, float(profile.get("card_fee_pct", 2.0)), 0.1) / 100.0
+            whish_fee = st.slider("Digital Wallet Fee (%)", 0.0, 10.0, float(profile.get("whish_fee_pct", 1.0)), 0.1) / 100.0
+
+        with st.expander("2. COGS, Waste & Inflation", expanded=False):
+            waste_pct = st.slider("Kitchen Waste Allowance (%)", 0.0, 15.0, float(profile.get("waste_pct", 3.0)), 0.5) / 100.0
+            supplier_inflation_pct = st.slider("Supplier Cost Stress-Test (%)", -10.0, 35.0, 0.0, 1.0) / 100.0
+            fallback_cogs_pct = st.slider("Default COGS % (If Unmapped)", 5.0, 80.0, 32.0, 1.0) / 100.0
+
+        with st.expander("3. Fixed Monthly OPEX", expanded=False):
+            monthly_rent = st.number_input("Monthly Rent ($)", min_value=0.0, value=float(profile.get("monthly_rent_usd", 3500.0)), step=100.0)
+            monthly_payroll = st.number_input("Monthly Payroll ($)", min_value=0.0, value=float(profile.get("monthly_payroll_usd", 6200.0)), step=100.0)
+            monthly_utilities = st.number_input("Generator & Utilities ($)", min_value=0.0, value=float(profile.get("monthly_generator_utilities_usd", 1400.0)), step=50.0)
+
         st.divider()
-
-        st.markdown("#### 1️⃣ Commissions & Packaging")
-        lbp_rate = st.number_input("LBP to 1 Fresh USD Rate", min_value=1000.0, max_value=500000.0, value=float(profile.get("default_lbp_rate", 89500.0)), step=500.0)
-        delivery_fee = st.slider("Toters / Talabat Fee (%)", 0.0, 40.0, float(profile.get("delivery_fee_pct", 25.0)), 0.5) / 100.0
-        packaging_cost_usd = st.number_input("Delivery Packaging / Order ($)", min_value=0.0, max_value=5.0, value=float(profile.get("packaging_cost_usd", 0.65)), step=0.05)
-        card_fee = st.slider("Bank Card POS Fee (%)", 0.0, 10.0, float(profile.get("card_fee_pct", 2.0)), 0.1) / 100.0
-        whish_fee = st.slider("Whish Money Fee (%)", 0.0, 10.0, float(profile.get("whish_fee_pct", 1.0)), 0.1) / 100.0
-
-        st.markdown("#### 2️⃣ Waste, Inflation & OPEX")
-        waste_pct = st.slider("Kitchen Waste & Spoilage (%)", 0.0, 15.0, float(profile.get("waste_pct", 3.0)), 0.5) / 100.0
-        supplier_inflation_pct = st.slider("Supplier Cost Inflation Stress-Test (%)", -10.0, 35.0, 0.0, 1.0, help="Simulate how a +5% or +15% supplier cost jump impacts your EBITDA.") / 100.0
-        fallback_cogs_pct = st.slider("Fallback COGS % (If No COGS File)", 5.0, 80.0, 32.0, 1.0) / 100.0
-        monthly_rent = st.number_input("Monthly Rent (USD)", min_value=0.0, value=float(profile.get("monthly_rent_usd", 3500.0)), step=100.0)
-        monthly_payroll = st.number_input("Monthly Staff Payroll (USD)", min_value=0.0, value=float(profile.get("monthly_payroll_usd", 6200.0)), step=100.0)
-        monthly_utilities = st.number_input("Monthly Generator / EDL / WiFi (USD)", min_value=0.0, value=float(profile.get("monthly_generator_utilities_usd", 1400.0)), step=50.0)
-
-        st.divider()
-        wa_msg = urllib.parse.quote("Hi Ryan, I just tested your Executive POS & EBITDA Suite v4.0 and want to run a free 7-day margin audit on our POS export.")
-        st.link_button("📲 Request Custom POS Audit on WhatsApp", url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_msg}", use_container_width=True)
-        if st.button("Log Out", use_container_width=True):
+        wa_msg = urllib.parse.quote("Hi Ryan, I reviewed the Executive POS & EBITDA Suite and would like to configure a custom audit for our branches.")
+        st.link_button("Request Custom Deployment", url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_msg}", use_container_width=True)
+        if st.button("Sign Out", use_container_width=True):
             st.query_params.clear()
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title(f"📊 {company_name} — CFO Decision, EBITDA & Fraud Audit Suite")
-
-    mode = st.radio(
-        "Select Data Source:",
-        ["Use Built-in Demo Dataset (Instant Preview)", "Upload Custom Excel / CSV Files (Smart Column Mapper)"],
-        horizontal=True
-    )
+    # Top Workspace Header & Control Bar
+    top_left, top_right = st.columns([2.2, 1.2])
+    with top_left:
+        st.markdown(f"""
+        <div class="suite-header" style="border-bottom:none; margin-bottom:0.25rem; padding-bottom:0;">
+            <div class="suite-kicker">FINANCIAL OPERATIONS & AUDIT</div>
+            <h1 class="suite-title">{company_name}</h1>
+        </div>
+        """, unsafe_allow_html=True)
+    with top_right:
+        mode = st.radio(
+            "Data Source",
+            ["Built-in Demo Dataset", "Upload Custom POS File"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
 
     std_pos, std_cogs = None, None
 
-    if mode == "Upload Custom Excel / CSV Files (Smart Column Mapper)":
+    if mode == "Upload Custom POS File":
         u_col1, u_col2 = st.columns(2)
         with u_col1:
-            pos_file = st.file_uploader("1. Upload Raw POS Export (.xlsx, .xls, .csv) [Required]", type=["csv", "xlsx", "xls"])
+            pos_file = st.file_uploader("1. Raw POS Export (.xlsx, .xls, .csv) [Required]", type=["csv", "xlsx", "xls"])
         with u_col2:
-            cogs_file = st.file_uploader("2. Upload SKU Master COGS (.xlsx, .xls, .csv) [Optional]", type=["csv", "xlsx", "xls"])
+            cogs_file = st.file_uploader("2. Master SKU COGS (.xlsx, .xls, .csv) [Optional]", type=["csv", "xlsx", "xls"])
 
         if not pos_file:
-            st.info("👆 Drop any Excel or CSV file from Omega POS, Bim, Foodics, or Square above to launch the **Smart Column Mapper**.")
+            st.markdown('<div class="exec-banner">Upload a POS export file above to initialize automated column mapping.</div>', unsafe_allow_html=True)
             return
 
         raw_pos = safe_read_file(pos_file)
         pos_cols = list(raw_pos.columns)
         opt_pos_cols = ["(None / Auto-Fill)"] + pos_cols
 
-        with st.expander("🛠️ Smart POS Column Mapper (Auto-Detected — Verify or Change Dropdowns)", expanded=True):
+        with st.expander("Column Mapping Configuration (Auto-Detected)", expanded=True):
             m1, m2, m3, m4 = st.columns(4)
             with m1:
-                col_amount = st.selectbox("💰 Gross Sales / Total Price *", pos_cols, index=guess_column_index(pos_cols, ["gross", "amount", "total", "sales", "price", "montant", "ttc", "nettotal", "value"]))
-                col_item = st.selectbox("🍔 Item / Product Name *", pos_cols, index=guess_column_index(pos_cols, ["item", "product", "article", "description", "menu", "designation", "name"]))
+                col_amount = st.selectbox("Gross Sales / Total *", pos_cols, index=guess_column_index(pos_cols, ["gross", "amount", "total", "sales", "price", "montant", "ttc", "nettotal", "value"]))
+                col_item = st.selectbox("Item / Product Name *", pos_cols, index=guess_column_index(pos_cols, ["item", "product", "article", "description", "menu", "designation", "name"]))
             with m2:
-                col_qty = st.selectbox("🔢 Quantity Sold", opt_pos_cols, index=guess_column_index(pos_cols, ["qty", "quantity", "quantite", "qte", "count", "units"], allow_none=True))
-                col_channel = st.selectbox("🛵 Payment / Delivery Channel", opt_pos_cols, index=guess_column_index(pos_cols, ["channel", "payment", "source", "type", "method", "mode", "aggregator"], allow_none=True))
-                col_discount = st.selectbox("🏷️ Discount / Void Amount", opt_pos_cols, index=guess_column_index(pos_cols, ["disc", "remise", "void", "comp", "promo"], allow_none=True))
+                col_qty = st.selectbox("Quantity Sold", opt_pos_cols, index=guess_column_index(pos_cols, ["qty", "quantity", "quantite", "qte", "count", "units"], allow_none=True))
+                col_channel = st.selectbox("Payment / Order Channel", opt_pos_cols, index=guess_column_index(pos_cols, ["channel", "payment", "source", "type", "method", "mode", "aggregator"], allow_none=True))
+                col_discount = st.selectbox("Discount / Void Amount", opt_pos_cols, index=guess_column_index(pos_cols, ["disc", "remise", "void", "comp", "promo"], allow_none=True))
             with m3:
-                col_date = st.selectbox("📅 Order Date", opt_pos_cols, index=guess_column_index(pos_cols, ["date", "time", "day", "created", "business_date"], allow_none=True))
-                col_branch = st.selectbox("🏢 Branch / Store Location", opt_pos_cols, index=guess_column_index(pos_cols, ["branch", "store", "location", "outlet", "shop", "point"], allow_none=True))
-                col_cashier = st.selectbox("👤 Cashier / Server Name", opt_pos_cols, index=guess_column_index(pos_cols, ["cashier", "user", "server", "waiter", "caissier", "emp"], allow_none=True))
+                col_date = st.selectbox("Transaction Date", opt_pos_cols, index=guess_column_index(pos_cols, ["date", "time", "day", "created", "business_date"], allow_none=True))
+                col_branch = st.selectbox("Branch / Location", opt_pos_cols, index=guess_column_index(pos_cols, ["branch", "store", "location", "outlet", "shop", "point"], allow_none=True))
+                col_cashier = st.selectbox("Cashier / Operator", opt_pos_cols, index=guess_column_index(pos_cols, ["cashier", "user", "server", "waiter", "caissier", "emp"], allow_none=True))
             with m4:
-                col_sku = st.selectbox("🏷️ SKU / Item Code", opt_pos_cols, index=guess_column_index(pos_cols, ["sku", "code", "barcode", "ref", "item_id"], allow_none=True))
-                col_curr = st.selectbox("💵 Currency (LBP/USD)", opt_pos_cols, index=guess_column_index(pos_cols, ["curr", "devise", "currency"], allow_none=True))
-                col_inline_cost = st.selectbox("🧾 Unit Cost (If Inside POS File)", opt_pos_cols, index=guess_column_index(pos_cols, ["cout", "cost", "cogs", "achat"], allow_none=True))
+                col_sku = st.selectbox("SKU / Article Code", opt_pos_cols, index=guess_column_index(pos_cols, ["sku", "code", "barcode", "ref", "item_id"], allow_none=True))
+                col_curr = st.selectbox("Currency (LBP / USD)", opt_pos_cols, index=guess_column_index(pos_cols, ["curr", "devise", "currency"], allow_none=True))
+                col_inline_cost = st.selectbox("Unit Cost (If in POS File)", opt_pos_cols, index=guess_column_index(pos_cols, ["cout", "cost", "cogs", "achat"], allow_none=True))
 
         std_pos = pd.DataFrame()
         std_pos["Order_ID"] = [f"ORD-{10000 + i}" for i in range(len(raw_pos))]
@@ -666,16 +793,16 @@ def main_portal():
             raw_cogs = safe_read_file(cogs_file)
             cogs_cols = list(raw_cogs.columns)
             opt_cogs_cols = ["(None / Auto-Fill)"] + cogs_cols
-            with st.expander("🛠️ Smart COGS Column Mapper", expanded=True):
+            with st.expander("COGS Column Mapping", expanded=True):
                 c1, c2, c3, c4 = st.columns(4)
                 with c1:
-                    cogs_cost_col = st.selectbox("💵 Unit Cost (USD) *", cogs_cols, index=guess_column_index(cogs_cols, ["cost", "cogs", "unit_cost", "achat", "cout"]))
+                    cogs_cost_col = st.selectbox("Unit Cost (USD) *", cogs_cols, index=guess_column_index(cogs_cols, ["cost", "cogs", "unit_cost", "achat", "cout"]))
                 with c2:
-                    cogs_item_col = st.selectbox("🍔 Item Name", opt_cogs_cols, index=guess_column_index(cogs_cols, ["item", "product", "article", "name", "designation"], allow_none=True))
+                    cogs_item_col = st.selectbox("Item Name", opt_cogs_cols, index=guess_column_index(cogs_cols, ["item", "product", "article", "name", "designation"], allow_none=True))
                 with c3:
-                    cogs_sku_col = st.selectbox("🏷️ SKU / Code", opt_cogs_cols, index=guess_column_index(cogs_cols, ["sku", "code", "barcode", "ref"], allow_none=True))
+                    cogs_sku_col = st.selectbox("SKU / Code", opt_cogs_cols, index=guess_column_index(cogs_cols, ["sku", "code", "barcode", "ref"], allow_none=True))
                 with c4:
-                    cogs_cat_col = st.selectbox("📂 Category", opt_cogs_cols, index=guess_column_index(cogs_cols, ["cat", "group", "family", "famille"], allow_none=True))
+                    cogs_cat_col = st.selectbox("Category", opt_cogs_cols, index=guess_column_index(cogs_cols, ["cat", "group", "family", "famille"], allow_none=True))
 
             std_cogs = pd.DataFrame()
             std_cogs["Unit_Cost_USD"] = raw_cogs[cogs_cost_col]
@@ -694,16 +821,16 @@ def main_portal():
         std_pos = sample_pos.rename(columns={"Item_Sold": "Item_Name"})
         std_cogs = sample_cogs
 
-    cleaned_df, void_df = process_standardized_data(
+    cleaned_df = process_standardized_data(
         std_pos, std_cogs, lbp_rate, delivery_fee, card_fee, whish_fee,
         packaging_cost_usd, waste_pct, supplier_inflation_pct, fallback_cogs_pct
     )
 
     if cleaned_df.empty:
-        st.error("No valid positive sales rows were found. Please check your Gross Sales column selection.")
+        st.error("No valid positive sales rows were found. Verify the Gross Sales column selection.")
         return
 
-    # Calculate Active Period, Prorated OPEX & Daily Break-Even
+    # Financial Aggregations
     active_days = max(1, cleaned_df["Clean_Date"].nunique())
     monthly_total_opex = monthly_rent + monthly_payroll + monthly_utilities
     daily_fixed_opex = monthly_total_opex / 30.0
@@ -729,94 +856,113 @@ def main_portal():
     sku_matrix = build_bcg_menu_matrix(cleaned_df)
 
     # Branch Manager Restricted Role
-    if role == "Branch Manager (Cash & Shift Recon Only)":
-        st.info("🔒 **Branch Manager Mode Active:** Supplier COGS and Executive EBITDA are restricted. Showing Shift Cash Drawer Reconciliation only.")
+    if role == "Branch Manager (Cash Recon)":
+        st.markdown('<div class="exec-banner"><strong>Branch Manager View:</strong> Supplier COGS and Executive EBITDA are hidden. Displaying Shift Cash Drawer Reconciliation.</div>', unsafe_allow_html=True)
         branches_list = ["All Branches"] + sorted(cleaned_df["Branch"].unique().tolist())
-        sel_branch = st.selectbox("Select Your Branch:", branches_list)
+        sel_branch = st.selectbox("Select Branch", branches_list)
         b_df = cleaned_df if sel_branch == "All Branches" else cleaned_df[cleaned_df["Branch"] == sel_branch]
         expected_cash = b_df[b_df["Channel"] == "In-Store Cash"]["Gross_Sales_USD"].sum()
-        expected_whish = b_df[b_df["Channel"] == "Whish / Mobile Wallet"]["Net_Revenue_USD"].sum()
+        expected_whish = b_df[b_df["Channel"] == "Digital Wallet (Whish)"]["Net_Revenue_USD"].sum()
 
         c1, c2 = st.columns(2)
-        c1.metric("POS Expected In-Store Cash (USD Equiv.)", f"${expected_cash:,.2f}")
-        c2.metric("Expected Whish Wallet Settlement", f"${expected_whish:,.2f}")
+        c1.metric("POS Expected Cash (USD Equiv.)", f"${expected_cash:,.2f}")
+        c2.metric("Expected Digital Wallet Settlement", f"${expected_whish:,.2f}")
 
-        st.subheader("💵 Physical Cash Drawer Count (End-of-Shift Audit)")
+        st.subheader("End-of-Shift Physical Drawer Count")
         col_u, col_l = st.columns(2)
         with col_u:
-            counted_usd = st.number_input("Physical Fresh USD Bills Counted ($)", min_value=0.0, value=float(round(expected_cash * 0.70, 2)), step=10.0)
+            counted_usd = st.number_input("Physical USD Bills Counted ($)", min_value=0.0, value=float(round(expected_cash * 0.70, 2)), step=10.0)
         with col_l:
             counted_lbp = st.number_input("Physical LBP Bills Counted (LBP)", min_value=0.0, value=float(round(expected_cash * 0.30 * lbp_rate, -3)), step=100000.0)
 
         total_counted_usd = counted_usd + (counted_lbp / lbp_rate)
         variance_usd = total_counted_usd - expected_cash
         if abs(variance_usd) < 1.0:
-            st.success(f"✅ Drawer Balanced! Total Counted: ${total_counted_usd:,.2f} (Variance:${variance_usd:+.2f})")
+            st.success(f"Drawer Balanced — Total Counted: ${total_counted_usd:,.2f} (Variance: ${variance_usd:+.2f})")
         elif variance_usd < 0:
-            st.error(f"🚨 CASH SHORTAGE DETECTED: Drawer is SHORT by ${abs(variance_usd):,.2f} ({abs(variance_usd)*lbp_rate:,.0f} LBP)")
+            st.error(f"Cash Shortage Detected — Drawer is short by ${abs(variance_usd):,.2f} ({abs(variance_usd)*lbp_rate:,.0f} LBP)")
         else:
-            st.warning(f"⚠️ CASH OVERAGE: Drawer is OVER by +${variance_usd:,.2f} (Verify unrecorded POS tickets)")
+            st.warning(f"Cash Overage — Drawer is over by +${variance_usd:,.2f} (Verify unrecorded POS tickets)")
         return
 
-    # Top-Level Executive KPI Cards
-    st.divider()
+    # Executive Summary Bar + Export Button
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.metric("Gross POS Sales", f"${total_gross:,.2f}")
     k2.metric("Fees & Packaging", f"-${total_fees_pkg:,.2f}")
-    k3.metric("COGS + Waste", f"-${total_cogs_waste:,.2f}")
+    k3.metric("COGS & Waste", f"-${total_cogs_waste:,.2f}")
     k4.metric("Contribution Profit", f"${contrib_profit:,.2f}")
     k5.metric(f"Prorated OPEX ({active_days}d)", f"-${prorated_total_opex:,.2f}")
-    k6.metric("True EBITDA (Net)", f"${true_ebitda:,.2f}", f"{ebitda_margin_pct:.1f}% margin")
+    k6.metric("Operating EBITDA", f"${true_ebitda:,.2f}", f"{ebitda_margin_pct:.1f}% margin")
 
-    excel_bytes = build_excel_in_memory(cleaned_df, sku_matrix, company_name, lbp_rate, prorated_opex_dict)
-    st.download_button(
-        label="⬇️ Download Full Executive Excel Workbook (BCG Matrix + EBITDA + Daily Recon) (.xlsx)",
-        data=excel_bytes,
-        file_name=f"{company_name.replace(' ', '_')}_Executive_EBITDA_Audit.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        type="primary",
-        use_container_width=True
-    )
-
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "⭐ 1. BCG Menu Matrix",
-        "🎛️ 2. Price Elasticity & Repricing Lab",
-        "🏢 3. EBITDA, Break-Even & Working Capital",
-        "💵 4. Cash Drawer Shift Audit",
-        "🕵️ 5. Fraud, Void & Discount Radar",
-        "📋 6. AI CFO Memo (EN / FR / AR)"
-    ])
-
-    # TAB 1: BCG MATRIX
-    with tab1:
-        st.subheader("Boston Matrix: Unit Sales Volume vs. Net Contribution Margin")
-        st.dataframe(
-            sku_matrix.style.format({
-                "Units_Sold": "{:,.0f}",
-                "Gross_Sales_USD": "${:,.2f}",
-                "Platform_Fees_USD": "${:,.2f}",
-                "Packaging_USD": "${:,.2f}",
-                "Total_COGS_USD": "${:,.2f}",
-                "Net_Profit_USD": "${:,.2f}",
-                "Avg_Unit_Price_USD": "${:,.2f}",
-                "Unit_Contribution_USD": "${:,.2f}",
-                "Margin_Pct": "{:.1f}%"
-            }),
+    bar_left, bar_right = st.columns([3, 1.2])
+    with bar_left:
+        st.caption(f"Showing normalized ledger across {active_days} active day(s) at {lbp_rate:,.0f} LBP/USD.")
+    with bar_right:
+        excel_bytes = build_excel_in_memory(cleaned_df, sku_matrix, company_name, lbp_rate, prorated_opex_dict)
+        st.download_button(
+            label="Export Executive Workbook (.xlsx)",
+            data=excel_bytes,
+            file_name=f"{company_name.replace(' ', '_')}_Financial_Audit.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
             use_container_width=True
         )
 
-    # TAB 2: INTERACTIVE MENU REPRICING & PRICE ELASTICITY LAB
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Menu Engineering (BCG)",
+        "Price Elasticity Lab",
+        "EBITDA & Working Capital",
+        "Cash Drawer Audit",
+        "Discount & Void Controls",
+        "Executive Memo"
+    ])
+
+    # TAB 1: BCG MATRIX WITH NATIVE PROGRESS BARS
+    with tab1:
+        plowhorses_dogs = sku_matrix[sku_matrix["Classification"].str.contains("PLOWHORSE|UNDERPERFORMER")]
+        if not plowhorses_dogs.empty:
+            leaking_units = plowhorses_dogs["Units_Sold"].sum()
+            monthly_recovery = leaking_units * 1.25 * (30.0 / active_days)
+            st.markdown(
+                f'<div class="exec-banner"><strong>Margin Optimization Opportunity:</strong> {len(plowhorses_dogs)} SKU(s) classify as '
+                f'Plowhorses or Underperformers ({int(leaking_units):,} units sold). A +$1.25 delivery price adjustment yields an estimated '
+                f'<strong>+${monthly_recovery:,.2f}/month</strong> in net operating EBITDA.</div>',
+                unsafe_allow_html=True
+            )
+
+        st.dataframe(
+            sku_matrix,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "SKU": st.column_config.TextColumn("SKU", width="small"),
+                "Item_Name": st.column_config.TextColumn("Menu Item", width="medium"),
+                "Category": st.column_config.TextColumn("Category", width="small"),
+                "Units_Sold": st.column_config.NumberColumn("Units Sold", format="%d"),
+                "Gross_Sales_USD": st.column_config.NumberColumn("Gross Sales", format="$%.2f"),
+                "Platform_Fees_USD": st.column_config.NumberColumn("Platform Fees", format="$%.2f"),
+                "Packaging_USD": st.column_config.NumberColumn("Packaging", format="$%.2f"),
+                "Total_COGS_USD": st.column_config.NumberColumn("COGS & Waste", format="$%.2f"),
+                "Net_Profit_USD": st.column_config.NumberColumn("Net Contribution", format="$%.2f"),
+                "Avg_Unit_Price_USD": st.column_config.NumberColumn("Unit Price", format="$%.2f"),
+                "Unit_Contribution_USD": st.column_config.NumberColumn("Unit Margin ($)", format="$%.2f"),
+                "Margin_Pct": st.column_config.ProgressColumn("Net Margin (%)", format="%.1f%%", min_value=0, max_value=100),
+                "Classification": st.column_config.TextColumn("BCG Classification", width="medium"),
+            }
+        )
+
+    # TAB 2: PRICE ELASTICITY LAB
     with tab2:
-        st.subheader("🎛️ Interactive Menu Repricing & Price-Elasticity Simulator")
-        st.caption("Simulate how repricing a specific SKU (and accounting for potential customer volume dropoff) impacts your monthly bottom-line EBITDA.")
+        st.markdown("**Unit Price & Volume Elasticity Simulator**")
+        st.caption("Model the net monthly EBITDA impact of repricing an item while accounting for potential customer volume dropoff.")
 
         sim_col1, sim_col2, sim_col3 = st.columns(3)
         with sim_col1:
-            selected_item = st.selectbox("Select Menu Item to Reprice:", sku_matrix["Item_Name"].tolist())
+            selected_item = st.selectbox("Select SKU to Model", sku_matrix["Item_Name"].tolist())
         with sim_col2:
-            price_increase = st.slider("Proposed Price Increase (+USD):", 0.25, 5.00, 1.50, 0.25)
+            price_increase = st.slider("Proposed Price Increase (+USD)", 0.25, 5.00, 1.25, 0.25)
         with sim_col3:
-            volume_dropoff_pct = st.slider("Expected Customer Volume Dropoff (%):", 0.0, 30.0, 5.0, 1.0) / 100.0
+            volume_dropoff_pct = st.slider("Assumed Volume Dropoff (%)", 0.0, 30.0, 5.0, 1.0) / 100.0
 
         item_row = sku_matrix[sku_matrix["Item_Name"] == selected_item].iloc[0]
         cur_monthly_units = item_row["Units_Sold"] * (30.0 / active_days)
@@ -824,7 +970,6 @@ def main_portal():
         cur_unit_contrib = item_row["Unit_Contribution_USD"]
         cur_monthly_profit = cur_monthly_units * cur_unit_contrib
 
-        # Effective net gain per unit after average platform fee deduction
         avg_fee_ratio = item_row["Platform_Fees_USD"] / item_row["Gross_Sales_USD"] if item_row["Gross_Sales_USD"] else 0.10
         new_unit_contrib = cur_unit_contrib + (price_increase * (1.0 - avg_fee_ratio))
         new_monthly_units = cur_monthly_units * (1.0 - volume_dropoff_pct)
@@ -833,116 +978,145 @@ def main_portal():
 
         r1, r2, r3, r4 = st.columns(4)
         r1.metric("Current Unit Price", f"${cur_unit_price:,.2f}")
-        r2.metric("New Simulated Price", f"${cur_unit_price + price_increase:,.2f}", f"+${price_increase:,.2f}")
-        r3.metric("Current Monthly Profit (SKU)", f"${cur_monthly_profit:,.2f}")
-        r4.metric("Projected Monthly Profit (SKU)", f"${new_monthly_profit:,.2f}", f"{monthly_ebitda_lift:+,.2f} / mo")
+        r2.metric("Simulated Unit Price", f"${cur_unit_price + price_increase:,.2f}", f"+${price_increase:,.2f}")
+        r3.metric("Baseline Monthly Contribution", f"${cur_monthly_profit:,.2f}")
+        r4.metric("Projected Monthly Contribution", f"${new_monthly_profit:,.2f}", f"{monthly_ebitda_lift:+,.2f} / mo")
 
         if monthly_ebitda_lift > 0:
-            st.success(
-                f"✅ **High-ROI Pricing Move:** Even if unit sales of **{selected_item}** drop by **{volume_dropoff_pct*100:.0f}%**, "
-                f"raising the price by **+${price_increase:.2f}** adds **+${monthly_ebitda_lift:,.2f} every month** "
-                f"(**+${monthly_ebitda_lift*12:,.2f}/year**) in pure net EBITDA."
+            st.markdown(
+                f'<div class="exec-banner"><strong>Positive Net Elasticity:</strong> Even with a {volume_dropoff_pct*100:.0f}% reduction in unit volume, '
+                f'repricing <strong>{selected_item}</strong> by +${price_increase:.2f} generates <strong>+${monthly_ebitda_lift:,.2f}/month</strong> '
+                f'(+${monthly_ebitda_lift*12:,.2f} annualized) in incremental EBITDA.</div>',
+                unsafe_allow_html=True
             )
         else:
-            st.error("⚠️ Volume dropoff outweighs the price increase. Test a smaller price bump or reduce portion COGS instead.")
+            st.markdown(
+                '<div class="exec-banner-warn"><strong>Negative Net Elasticity:</strong> Projected volume loss outweighs the unit price increase. '
+                'Consider a smaller price adjustment or portion cost engineering.</div>',
+                unsafe_allow_html=True
+            )
 
     # TAB 3: EBITDA, BREAK-EVEN & WORKING CAPITAL
     with tab3:
-        col_p1, col_p2 = st.columns(2)
+        col_p1, col_p2 = st.columns([1.3, 1])
         with col_p1:
-            st.subheader(f"📊 True EBITDA P&L Waterfall ({active_days} Active Days)")
+            st.markdown(f"**Operating P&L Waterfall ({active_days} Active Days)**")
             pnl_df = pd.DataFrame([
-                {"Line Item": "1. Gross POS Revenue", "Amount (USD)": total_gross, "% of Sales": 100.0},
-                {"Line Item": "2. (-) Delivery & POS Commissions", "Amount (USD)": -cleaned_df["Platform_Fee_USD"].sum(), "% of Sales": -cleaned_df["Platform_Fee_USD"].sum() / total_gross * 100},
-                {"Line Item": "3. (-) Delivery Packaging & Disposables", "Amount (USD)": -cleaned_df["Packaging_Cost_USD"].sum(), "% of Sales": -cleaned_df["Packaging_Cost_USD"].sum() / total_gross * 100},
-                {"Line Item": "4. (-) Raw Food / Inventory COGS (Inc. Inflation)", "Amount (USD)": -cleaned_df["Raw_COGS_USD"].sum(), "% of Sales": -cleaned_df["Raw_COGS_USD"].sum() / total_gross * 100},
-                {"Line Item": "5. (-) Kitchen Waste & Spoilage Allowance", "Amount (USD)": -cleaned_df["Waste_Cost_USD"].sum(), "% of Sales": -cleaned_df["Waste_Cost_USD"].sum() / total_gross * 100},
-                {"Line Item": "= GROSS CONTRIBUTION PROFIT", "Amount (USD)": contrib_profit, "% of Sales": contrib_profit / total_gross * 100},
-                {"Line Item": "6. (-) Prorated Rent", "Amount (USD)": -prorated_opex_dict["rent"], "% of Sales": -prorated_opex_dict["rent"] / total_gross * 100},
-                {"Line Item": "7. (-) Prorated Staff Payroll", "Amount (USD)": -prorated_opex_dict["payroll"], "% of Sales": -prorated_opex_dict["payroll"] / total_gross * 100},
-                {"Line Item": "8. (-) Prorated Generator & Utilities", "Amount (USD)": -prorated_opex_dict["utilities"], "% of Sales": -prorated_opex_dict["utilities"] / total_gross * 100},
-                {"Line Item": "= TRUE OPERATING EBITDA (NET CASH FLOW)", "Amount (USD)": true_ebitda, "% of Sales": ebitda_margin_pct},
+                {"Line Item": "1. Gross POS Revenue", "USD Amount": total_gross, "Share of Revenue (%)": 100.0},
+                {"Line Item": "2. (-) Aggregator & POS Commissions", "USD Amount": -cleaned_df["Platform_Fee_USD"].sum(), "Share of Revenue (%)": -cleaned_df["Platform_Fee_USD"].sum() / total_gross * 100},
+                {"Line Item": "3. (-) Delivery Packaging & Disposables", "USD Amount": -cleaned_df["Packaging_Cost_USD"].sum(), "Share of Revenue (%)": -cleaned_df["Packaging_Cost_USD"].sum() / total_gross * 100},
+                {"Line Item": "4. (-) Raw Inventory COGS", "USD Amount": -cleaned_df["Raw_COGS_USD"].sum(), "Share of Revenue (%)": -cleaned_df["Raw_COGS_USD"].sum() / total_gross * 100},
+                {"Line Item": "5. (-) Kitchen Waste & Spoilage", "USD Amount": -cleaned_df["Waste_Cost_USD"].sum(), "Share of Revenue (%)": -cleaned_df["Waste_Cost_USD"].sum() / total_gross * 100},
+                {"Line Item": "= GROSS CONTRIBUTION PROFIT", "USD Amount": contrib_profit, "Share of Revenue (%)": contrib_profit / total_gross * 100},
+                {"Line Item": "6. (-) Prorated Rent", "USD Amount": -prorated_opex_dict["rent"], "Share of Revenue (%)": -prorated_opex_dict["rent"] / total_gross * 100},
+                {"Line Item": "7. (-) Prorated Staff Payroll", "USD Amount": -prorated_opex_dict["payroll"], "Share of Revenue (%)": -prorated_opex_dict["payroll"] / total_gross * 100},
+                {"Line Item": "8. (-) Prorated Generator & Utilities", "USD Amount": -prorated_opex_dict["utilities"], "Share of Revenue (%)": -prorated_opex_dict["utilities"] / total_gross * 100},
+                {"Line Item": "= OPERATING EBITDA (NET CASH FLOW)", "USD Amount": true_ebitda, "Share of Revenue (%)": ebitda_margin_pct},
             ])
-            st.dataframe(pnl_df.style.format({"Amount (USD)": "${:,.2f}", "% of Sales": "{:.1f}%"}), use_container_width=True)
+            st.dataframe(
+                pnl_df,
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Line Item": st.column_config.TextColumn("P&L Line Item", width="medium"),
+                    "USD Amount": st.column_config.NumberColumn("Amount (USD)", format="$%.2f"),
+                    "Share of Revenue (%)": st.column_config.NumberColumn("% of Gross Sales", format="%.1f%%"),
+                }
+            )
 
         with col_p2:
-            st.subheader("🎯 Daily Break-Even & Working Capital Hold")
+            st.markdown("**Break-Even & Working Capital Settlement Lag**")
             avg_daily_sales = total_gross / active_days
             safety_margin = ((avg_daily_sales - daily_breakeven_sales) / avg_daily_sales * 100) if avg_daily_sales else 0.0
 
             b1, b2 = st.columns(2)
-            b1.metric("Daily Break-Even Target", f"${daily_breakeven_sales:,.2f} / day")
-            b2.metric("Your Actual Daily Avg", f"${avg_daily_sales:,.2f} / day", f"{safety_margin:+.1f}% vs Break-Even")
+            b1.metric("Daily Break-Even Target", f"${daily_breakeven_sales:,.2f}/day")
+            b2.metric("Actual Daily Average", f"${avg_daily_sales:,.2f}/day", f"{safety_margin:+.1f}% cushion")
 
-            instant_cash = cleaned_df[cleaned_df["Channel"].isin(["In-Store Cash", "Whish / Mobile Wallet"])]["Net_Revenue_USD"].sum()
-            card_hold = cleaned_df[cleaned_df["Channel"] == "Bank Card POS"]["Net_Revenue_USD"].sum()
-            aggregator_hold = cleaned_df[cleaned_df["Channel"] == "Toters / Delivery Apps"]["Net_Revenue_USD"].sum()
+            instant_cash = cleaned_df[cleaned_df["Channel"].isin(["In-Store Cash", "Digital Wallet (Whish)"])]["Net_Revenue_USD"].sum()
+            card_hold = cleaned_df[cleaned_df["Channel"] == "Card POS Terminal"]["Net_Revenue_USD"].sum()
+            aggregator_hold = cleaned_df[cleaned_df["Channel"] == "Delivery Aggregators"]["Net_Revenue_USD"].sum()
 
             wc_df = pd.DataFrame([
-                {"Settlement Bucket": "🟢 Immediate Cash & Whish (Same Day)", "Net Receivable (USD)": instant_cash, "Payout Lag": "0 Days"},
-                {"Settlement Bucket": "🟡 Bank Card POS Terminal Hold", "Net Receivable (USD)": card_hold, "Payout Lag": "2–3 Business Days"},
-                {"Settlement Bucket": "🔴 Toters / Talabat / Aggregator Hold", "Net Receivable (USD)": aggregator_hold, "Payout Lag": "7–14 Days"},
+                {"Settlement Bucket": "Immediate Cash & Digital Wallet", "Net Receivable": instant_cash, "Settlement Cycle": "Same Day (0 Days)"},
+                {"Settlement Bucket": "Card POS Acquirer Hold", "Net Receivable": card_hold, "Settlement Cycle": "2–3 Business Days"},
+                {"Settlement Bucket": "Delivery Aggregator Hold", "Net Receivable": aggregator_hold, "Settlement Cycle": "7–14 Days (Weekly)"},
             ])
-            st.dataframe(wc_df.style.format({"Net Receivable (USD)": "${:,.2f}"}), use_container_width=True)
+            st.dataframe(
+                wc_df,
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Net Receivable": st.column_config.NumberColumn("Net Receivable (USD)", format="$%.2f")
+                }
+            )
 
     # TAB 4: CASH DRAWER SHIFT AUDIT
     with tab4:
-        st.subheader("💵 End-of-Shift Cash Drawer Over/Short Audit")
+        st.markdown("**End-of-Shift Cash Drawer Reconciliation**")
         branches_list = ["All Branches"] + sorted(cleaned_df["Branch"].unique().tolist())
-        sel_branch = st.selectbox("Filter Audit by Branch:", branches_list)
+        sel_branch = st.selectbox("Select Branch to Reconcile", branches_list)
         b_df = cleaned_df if sel_branch == "All Branches" else cleaned_df[cleaned_df["Branch"] == sel_branch]
         expected_cash = b_df[b_df["Channel"] == "In-Store Cash"]["Gross_Sales_USD"].sum()
 
         col_c1, col_c2, col_c3 = st.columns(3)
         with col_c1:
-            counted_usd = st.number_input("Physical USD Bills in Drawer ($)", min_value=0.0, value=float(round(expected_cash * 0.70, 2)), step=10.0)
+            counted_usd = st.number_input("Counted USD Notes ($)", min_value=0.0, value=float(round(expected_cash * 0.70, 2)), step=10.0)
         with col_c2:
-            counted_lbp = st.number_input("Physical LBP Bills in Drawer (LBP)", min_value=0.0, value=float(round(expected_cash * 0.30 * lbp_rate, -3)), step=100000.0)
+            counted_lbp = st.number_input("Counted LBP Notes (LBP)", min_value=0.0, value=float(round(expected_cash * 0.30 * lbp_rate, -3)), step=100000.0)
         with col_c3:
             total_counted = counted_usd + (counted_lbp / lbp_rate)
             variance = total_counted - expected_cash
-            st.metric("Expected POS Cash (USD)", f"${expected_cash:,.2f}")
-            st.metric("Actual Counted Cash (USD Equiv.)", f"${total_counted:,.2f}", f"{variance:+.2f} USD Variance")
+            st.metric("Expected POS Cash", f"${expected_cash:,.2f}")
+            st.metric("Total Physical Cash (USD Equiv.)", f"${total_counted:,.2f}", f"{variance:+.2f} USD Variance")
 
-    # TAB 5: FRAUD, VOID & DISCOUNT RADAR
+    # TAB 5: DISCOUNT & VOID CONTROLS
     with tab5:
-        st.subheader("🕵️ Cashier Discount, Void & Leakage Anomaly Radar")
-        st.caption("Flags cashiers, servers, or branches with abnormal discount frequencies or voided/zero-dollar orders.")
+        st.markdown("**Cashier Discount & Void Anomaly Audit**")
+        st.caption("Monitors discount frequency across operators and branches to identify unauthorized comps or register leakage.")
 
         cashier_audit = cleaned_df.groupby(["Branch", "Cashier_Server"], as_index=False).agg(
             Total_Orders=("Order_ID", "count"),
             Gross_Sales_USD=("Gross_Sales_USD", "sum"),
             Total_Discounts_USD=("Discount_USD", "sum"),
-            Discounted_Orders=("Discount_USD", lambda s: (s > 0).sum())
+            Discounted_Orders=("Discount_USD", lambda s: int((s > 0).sum()))
         )
-        cashier_audit["Discount_Rate_Pct"] = (cashier_audit["Total_Discounts_USD"] / (cashier_audit["Gross_Sales_USD"] + cashier_audit["Total_Discounts_USD"])) * 100.0
-        cashier_audit["Audit_Flag"] = cashier_audit["Discount_Rate_Pct"].apply(
-            lambda r: "🚨 HIGH RISK (Audit Cashier)" if r >= 5.0 else ("⚠️ ELEVATED" if r >= 2.0 else "🟢 NORMAL")
+        cashier_audit["Discount_Rate_Pct"] = (
+            cashier_audit["Total_Discounts_USD"] / (cashier_audit["Gross_Sales_USD"] + cashier_audit["Total_Discounts_USD"])
+        ) * 100.0
+        cashier_audit["Control_Status"] = cashier_audit["Discount_Rate_Pct"].apply(
+            lambda r: "AUDIT REQUIRED (>5%)" if r >= 5.0 else ("ELEVATED (2–5%)" if r >= 2.0 else "WITHIN POLICY")
         )
         st.dataframe(
-            cashier_audit.sort_values("Total_Discounts_USD", ascending=False).style.format({
-                "Gross_Sales_USD": "${:,.2f}",
-                "Total_Discounts_USD": "${:,.2f}",
-                "Discount_Rate_Pct": "{:.1f}%"
-            }),
-            use_container_width=True
+            cashier_audit.sort_values("Total_Discounts_USD", ascending=False),
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Branch": st.column_config.TextColumn("Branch"),
+                "Cashier_Server": st.column_config.TextColumn("Operator"),
+                "Total_Orders": st.column_config.NumberColumn("Orders", format="%d"),
+                "Discounted_Orders": st.column_config.NumberColumn("Discounted Tickets", format="%d"),
+                "Gross_Sales_USD": st.column_config.NumberColumn("Net Sales (USD)", format="$%.2f"),
+                "Total_Discounts_USD": st.column_config.NumberColumn("Discounts Granted", format="$%.2f"),
+                "Discount_Rate_Pct": st.column_config.ProgressColumn("Discount Rate (%)", format="%.1f%%", min_value=0, max_value=25),
+                "Control_Status": st.column_config.TextColumn("Audit Status"),
+            }
         )
 
-    # TAB 6: MULTILINGUAL AI CFO EXECUTIVE MEMO
+    # TAB 6: EXECUTIVE MEMO
     with tab6:
-        st.subheader("📋 Automated Executive Board Memo & WhatsApp Export")
-        memo_lang = st.radio("Select Report Language:", ["English", "Français", "العربية"], horizontal=True)
-        aggregator_hold_val = cleaned_df[cleaned_df["Channel"] == "Toters / Delivery Apps"]["Net_Revenue_USD"].sum()
+        memo_lang = st.radio("Memo Language", ["English", "Français", "العربية"], horizontal=True)
+        aggregator_hold_val = cleaned_df[cleaned_df["Channel"] == "Delivery Aggregators"]["Net_Revenue_USD"].sum()
 
         memo_text = generate_cfo_memo(
             memo_lang, company_name, active_days, total_gross, total_fees_pkg,
-            contrib_profit, true_ebitda, ebitda_margin_pct, daily_breakeven_sales,
+            true_ebitda, ebitda_margin_pct, daily_breakeven_sales,
             sku_matrix, aggregator_hold_val
         )
-        st.markdown(memo_text)
+        st.markdown(f'<div class="exec-banner">{memo_text}</div>', unsafe_allow_html=True)
 
         wa_summary_url = f"https://wa.me/?text={urllib.parse.quote(memo_text)}"
-        st.link_button("📲 Share This CFO Executive Memo via WhatsApp", url=wa_summary_url, type="primary")
+        st.link_button("Forward Executive Memo via WhatsApp", url=wa_summary_url, type="primary")
 
 if not st.session_state.authenticated:
     login_screen()
