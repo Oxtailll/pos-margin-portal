@@ -6,8 +6,18 @@ from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
 
+# Force Streamlit base theme to Dark Mode for native canvas tables
+try:
+    st._config.set_option("theme.base", "dark")
+    st._config.set_option("theme.backgroundColor", "#090D16")
+    st._config.set_option("theme.secondaryBackgroundColor", "#111827")
+    st._config.set_option("theme.textColor", "#F8FAFC")
+    st._config.set_option("theme.primaryColor", "#3B82F6")
+except Exception:
+    pass
+
 # ==============================================================================
-# PAGE CONFIGURATION & INSTITUTIONAL DESIGN SYSTEM
+# PAGE CONFIGURATION & OBSIDIAN DARK DESIGN SYSTEM
 # ==============================================================================
 st.set_page_config(
     page_title="Financial & POS Reconciliation Suite",
@@ -15,17 +25,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-OWNER_WHATSAPP = "96170773186"
+OWNER_WHATSAPP = "96170000000"
 OWNER_EMAIL = "ryankhreiss@gmail.com"
 
-def apply_institutional_theme():
+def apply_obsidian_theme():
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
 
-        html, body, [class*="css"] {
+        /* Core Dark Surfaces */
+        html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+            background-color: #090D16 !important;
+            color: #F8FAFC !important;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            color: #0F172A;
         }
 
         #MainMenu, footer {visibility: hidden;}
@@ -37,9 +49,18 @@ def apply_institutional_theme():
             max-width: 1440px;
         }
 
-        /* Header Bar */
+        /* Sidebar Dark Surface */
+        section[data-testid="stSidebar"] {
+            background-color: #0D131F !important;
+            border-right: 1px solid #1E293B !important;
+        }
+        section[data-testid="stSidebar"] * {
+            color: #E2E8F0;
+        }
+
+        /* Executive Header Bar */
         .suite-header {
-            border-bottom: 1px solid #E2E8F0;
+            border-bottom: 1px solid #1E293B;
             padding-bottom: 0.85rem;
             margin-bottom: 1.25rem;
         }
@@ -47,95 +68,138 @@ def apply_institutional_theme():
             font-size: 0.7rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #64748B;
+            letter-spacing: 0.1em;
+            color: #38BDF8;
             margin-bottom: 0.2rem;
         }
         .suite-title {
             font-size: 1.55rem;
             font-weight: 700;
-            color: #0F172A;
+            color: #F8FAFC;
             letter-spacing: -0.02em;
             margin: 0;
         }
         .suite-subtitle {
             font-size: 0.85rem;
-            color: #475569;
-            margin-top: 0.2rem;
+            color: #94A3B8;
+            margin-top: 0.25rem;
         }
 
-        /* Metric Cards */
+        /* Obsidian KPI Metric Cards */
         div[data-testid="stMetric"] {
-            background-color: #FFFFFF;
-            border: 1px solid #E2E8F0;
+            background: linear-gradient(180deg, #131C2E 0%, #0F172A 100%) !important;
+            border: 1px solid #1E293B !important;
             border-radius: 8px;
             padding: 14px 16px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+            transition: border-color 0.15s ease;
+        }
+        div[data-testid="stMetric"]:hover {
+            border-color: #334155 !important;
         }
         div[data-testid="stMetricLabel"] > div {
-            font-size: 0.72rem !important;
+            font-size: 0.71rem !important;
             font-weight: 600 !important;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #64748B !important;
+            letter-spacing: 0.06em;
+            color: #94A3B8 !important;
         }
         div[data-testid="stMetricValue"] > div {
-            font-size: 1.4rem !important;
-            font-weight: 700 !important;
-            color: #0F172A !important;
+            font-family: 'JetBrains Mono', 'Inter', monospace !important;
+            font-size: 1.38rem !important;
+            font-weight: 600 !important;
+            color: #F8FAFC !important;
             letter-spacing: -0.02em;
         }
 
-        /* Navigation Tabs */
+        /* Expanders & Containers */
+        div[data-testid="stExpander"] {
+            background-color: #111827 !important;
+            border: 1px solid #1E293B !important;
+            border-radius: 8px !important;
+        }
+
+        /* Inputs & Selectboxes */
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="input"] > div {
+            background-color: #111827 !important;
+            border-color: #1E293B !important;
+            color: #F8FAFC !important;
+        }
+        label, .stMarkdown p, .stCaption {
+            color: #CBD5E1 !important;
+        }
+
+        /* Primary & Secondary Buttons */
+        .stButton > button[kind="primary"],
+        .stDownloadButton > button[kind="primary"] {
+            background-color: #2563EB !important;
+            color: #FFFFFF !important;
+            border: 1px solid #3B82F6 !important;
+            font-weight: 600 !important;
+            border-radius: 6px !important;
+        }
+        .stButton > button[kind="primary"]:hover,
+        .stDownloadButton > button[kind="primary"]:hover {
+            background-color: #1D4ED8 !important;
+            border-color: #60A5FA !important;
+        }
+        .stButton > button[kind="secondary"],
+        .stLinkButton > a {
+            background-color: #161F30 !important;
+            color: #E2E8F0 !important;
+            border: 1px solid #26334D !important;
+            border-radius: 6px !important;
+            font-weight: 500 !important;
+        }
+
+        /* Modern Dark Navigation Tabs */
         .stTabs [data-baseweb="tab-list"] {
             gap: 24px;
-            border-bottom: 1px solid #E2E8F0;
+            border-bottom: 1px solid #1E293B;
+            background-color: transparent;
         }
         .stTabs [data-baseweb="tab"] {
             height: 42px;
             font-size: 0.84rem;
             font-weight: 500;
-            color: #64748B;
+            color: #64748B !important;
             padding: 0 4px;
-            background-color: transparent;
+            background-color: transparent !important;
         }
         .stTabs [aria-selected="true"] {
-            color: #0F172A !important;
+            color: #38BDF8 !important;
             font-weight: 600 !important;
-            border-bottom: 2px solid #0F172A !important;
+            border-bottom: 2px solid #38BDF8 !important;
         }
 
-        /* Sidebar */
-        section[data-testid="stSidebar"] {
-            background-color: #F8FAFC;
-            border-right: 1px solid #E2E8F0;
-        }
-
-        /* Callout Banners */
+        /* Dark Callout Banners */
         .exec-banner {
-            background-color: #F8FAFC;
-            border: 1px solid #E2E8F0;
-            border-left: 3px solid #0F172A;
+            background-color: #111827;
+            border: 1px solid #1E293B;
+            border-left: 3px solid #38BDF8;
             border-radius: 6px;
-            padding: 12px 16px;
+            padding: 13px 16px;
             margin-bottom: 1rem;
             font-size: 0.86rem;
-            color: #1E293B;
+            color: #E2E8F0;
+            line-height: 1.55;
         }
         .exec-banner-warn {
-            background-color: #FEF2F2;
-            border: 1px solid #FECACA;
-            border-left: 3px solid #DC2626;
+            background-color: #1C1217;
+            border: 1px solid #3F1D28;
+            border-left: 3px solid #EF4444;
             border-radius: 6px;
-            padding: 12px 16px;
+            padding: 13px 16px;
             margin-bottom: 1rem;
             font-size: 0.86rem;
-            color: #7F1D1D;
+            color: #FCA5A5;
+            line-height: 1.55;
         }
     </style>
     """, unsafe_allow_html=True)
 
-apply_institutional_theme()
+apply_obsidian_theme()
 
 # ==============================================================================
 # MULTI-TENANT CLIENT PROFILES
@@ -213,7 +277,7 @@ def login_screen():
             st.rerun()
 
         st.markdown(
-            "<div style='text-align:center; color:#94A3B8; font-size:0.72rem; margin: 18px 0; "
+            "<div style='text-align:center; color:#64748B; font-size:0.72rem; margin: 18px 0; "
             "text-transform:uppercase; letter-spacing:0.08em;'>Client Portal Authentication</div>",
             unsafe_allow_html=True
         )
@@ -634,7 +698,7 @@ def build_excel_in_memory(
     return output.getvalue()
 
 # ==============================================================================
-# MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR (NO EMOJIS)
+# MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR
 # ==============================================================================
 def generate_cfo_memo(
     lang: str,
@@ -689,7 +753,6 @@ def main_portal():
     profile = st.session_state.client_profile
     company_name = profile["company_name"]
 
-    # Clean Grouped Sidebar
     with st.sidebar:
         st.markdown(f"**{company_name}**")
         st.caption(f"Account: `{st.session_state.username}`")
@@ -896,7 +959,7 @@ def main_portal():
 
     bar_left, bar_right = st.columns([3, 1.2])
     with bar_left:
-        st.caption(f"Showing normalized ledger across {active_days} active day(s) at {lbp_rate:,.0f} LBP/USD.")
+        st.caption(f"Normalized ledger across {active_days} active day(s) at {lbp_rate:,.0f} LBP/USD.")
     with bar_right:
         excel_bytes = build_excel_in_memory(cleaned_df, sku_matrix, company_name, lbp_rate, prorated_opex_dict)
         st.download_button(
@@ -917,7 +980,7 @@ def main_portal():
         "Executive Memo"
     ])
 
-    # TAB 1: BCG MATRIX WITH NATIVE PROGRESS BARS
+    # TAB 1: BCG MATRIX
     with tab1:
         plowhorses_dogs = sku_matrix[sku_matrix["Classification"].str.contains("PLOWHORSE|UNDERPERFORMER")]
         if not plowhorses_dogs.empty:
