@@ -19,7 +19,7 @@ except Exception:
     pass
 
 # ==============================================================================
-# PAGE CONFIGURATION & OBSIDIAN DARK DESIGN SYSTEM
+# PAGE CONFIGURATION & ENCRYPTED SECRETS HELPERS
 # ==============================================================================
 st.set_page_config(
     page_title="Financial & POS Reconciliation Suite",
@@ -27,15 +27,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-OWNER_WHATSAPP = "96170773186"
-OWNER_EMAIL = "ryankhreiss@gmail.com"
-ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "ryanadmin2026"
-
 CLIENTS_JSON_PATH = "clients_store.json"
 COGS_STORAGE_DIR = "client_cogs_store"
 os.makedirs(COGS_STORAGE_DIR, exist_ok=True)
 
+def get_secret(key: str, default: str = "") -> str:
+    """Safely reads a key from Streamlit Cloud Secrets without exposing it in code."""
+    try:
+        if key in st.secrets:
+            return str(st.secrets[key]).strip()
+    except Exception:
+        pass
+    return default
+
+def get_admin_username() -> str:
+    return get_secret("admin_username", "admin").lower()
+
+def get_admin_password() -> str | None:
+    """Returns None if admin_password is not configured in Streamlit Secrets."""
+    pw = get_secret("admin_password", "")
+    return pw if pw else None
+
+def get_owner_whatsapp() -> str:
+    return re.sub(r"[^0-9]", "", get_secret("owner_whatsapp", ""))
+
+# ==============================================================================
+# OBSIDIAN DARK DESIGN SYSTEM
+# ==============================================================================
 def apply_obsidian_theme():
     st.markdown("""
     <style>
@@ -328,7 +346,6 @@ apply_obsidian_theme()
 # ==============================================================================
 # MULTI-TENANT CLIENT DATABASE & ADMIN PERSISTENCE ENGINE
 # ==============================================================================
-# Only "demo" is public. Paid clients are created via Admin Console or st.secrets.
 DEFAULT_CLIENTS = {
     "demo": {
         "password": "demo123",
@@ -342,17 +359,9 @@ DEFAULT_CLIENTS = {
         "monthly_rent_usd": 1800.0,
         "monthly_payroll_usd": 2400.0,
         "monthly_generator_utilities_usd": 750.0,
-        "demo_upload_mode": "teaser",  # "teaser" (redacted SKUs + no export) or "locked"
+        "demo_upload_mode": "teaser",
     }
 }
-
-def get_admin_password() -> str:
-    try:
-        if "admin_password" in st.secrets:
-            return str(st.secrets["admin_password"])
-    except Exception:
-        pass
-    return DEFAULT_ADMIN_PASSWORD
 
 def get_client_db() -> dict:
     db = dict(DEFAULT_CLIENTS)
@@ -412,10 +421,13 @@ def load_client_cogs_df(username: str) -> pd.DataFrame | None:
     return None
 
 def format_secrets_toml(clients_dict: dict) -> str:
-    lines = [f'admin_password = "{get_admin_password()}"', ""]
+    lines = [
+        f'admin_username = "{get_admin_username()}"',
+        'admin_password = "KEEP_YOUR_SECRET_ADMIN_PASSWORD"',
+        f'owner_whatsapp = "{get_owner_whatsapp()}"',
+        ""
+    ]
     for uname, p in clients_dict.items():
-        if uname == "demo":
-            continue
         lines.append(f"[clients.{uname}]")
         lines.append(f'password = "{p.get("password", "client123")}"')
         lines.append(f'company_name = "{p.get("company_name", uname)}"')
@@ -428,6 +440,8 @@ def format_secrets_toml(clients_dict: dict) -> str:
         lines.append(f'monthly_rent_usd = {float(p.get("monthly_rent_usd", 1800.0))}')
         lines.append(f'monthly_payroll_usd = {float(p.get("monthly_payroll_usd", 2400.0))}')
         lines.append(f'monthly_generator_utilities_usd = {float(p.get("monthly_generator_utilities_usd", 750.0))}')
+        if uname == "demo":
+            lines.append(f'demo_upload_mode = "{p.get("demo_upload_mode", "teaser")}"')
         lines.append("")
     return "\n".join(lines)
 
@@ -490,10 +504,13 @@ def login_screen():
             submit = st.form_submit_button("Sign In", use_container_width=True)
 
             if submit:
-                if username == ADMIN_USERNAME and password == get_admin_password():
+                admin_user = get_admin_username()
+                admin_pw = get_admin_password()
+
+                if username == admin_user and admin_pw is not None and password == admin_pw:
                     clients = get_client_db()
                     st.session_state.authenticated = True
-                    st.session_state.username = ADMIN_USERNAME
+                    st.session_state.username = admin_user
                     st.session_state.client_profile = clients["demo"]
                     st.session_state.is_admin = True
                     st.rerun()
@@ -1091,8 +1108,8 @@ def render_admin_console():
 
             if save_btn:
                 clean_u = re.sub(r"[^a-z0-9_-]", "", new_username)
-                if not clean_u or clean_u == "demo" or not new_password or not new_company:
-                    st.error("Please provide a valid non-demo Username, Password, and Company Name.")
+                if not clean_u or clean_u in ["demo", get_admin_username()] or not new_password or not new_company:
+                    st.error("Please provide a valid non-reserved Username, Password, and Company Name.")
                 else:
                     profile_payload = {
                         "password": new_password.strip(),
@@ -1193,6 +1210,7 @@ def main_portal():
     company_name = profile["company_name"]
     is_admin = st.session_state.get("is_admin", False)
     is_demo_account = (st.session_state.username == "demo") and (not is_admin)
+    owner_wa = get_owner_whatsapp()
 
     with st.sidebar:
         st.markdown(f"<div style='font-size:1.05rem; font-weight:700; color:#F8FAFC; margin-bottom:2px;'>{company_name}</div>", unsafe_allow_html=True)
@@ -1223,8 +1241,8 @@ def main_portal():
             monthly_utilities = st.number_input("Generator & Utilities ($)", min_value=0.0, value=float(profile.get("monthly_generator_utilities_usd", 750.0)), step=50.0)
 
         st.divider()
-        wa_msg = urllib.parse.quote("Hi Ryan, I tested the Executive POS & EBITDA Suite and want to activate a private client license for our branches.")
-        st.link_button("Activate Private Client License", url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_msg}", use_container_width=True)
+        wa_msg = urllib.parse.quote("Hi, I tested the Executive POS & EBITDA Suite and want to activate a private client license for our branches.")
+        st.link_button("Activate Private Client License", url=f"https://wa.me/{owner_wa}?text={wa_msg}", use_container_width=True)
         if st.button("Sign Out", use_container_width=True):
             st.query_params.clear()
             st.session_state.authenticated = False
@@ -1251,7 +1269,6 @@ def main_portal():
             label_visibility="collapsed"
         )
 
-    # Check if a public Demo visitor is trying to use Custom File Upload
     is_custom_upload = (mode == "Upload Custom POS File")
     demo_paywall_active = is_demo_account and is_custom_upload
     demo_upload_mode = profile.get("demo_upload_mode", "teaser")
@@ -1266,8 +1283,8 @@ def main_portal():
             </div>
         </div>
         """, unsafe_allow_html=True)
-        wa_unlock = urllib.parse.quote("Hi Ryan, I am on the POS Suite Demo and would like to send 1 week of our POS export for a complimentary audit and private login.")
-        st.link_button("Request Complimentary Audit & Private Login via WhatsApp", url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_unlock}", type="primary")
+        wa_unlock = urllib.parse.quote("Hi, I am on the POS Suite Demo and would like to send 1 week of our POS export for a complimentary audit and private login.")
+        st.link_button("Request Complimentary Audit & Private Login via WhatsApp", url=f"https://wa.me/{owner_wa}?text={wa_unlock}", type="primary")
         return
 
     std_pos, std_cogs = None, None
@@ -1398,7 +1415,6 @@ def main_portal():
 
     sku_matrix = build_bcg_menu_matrix(cleaned_df)
 
-    # Redact SKU & Cashier names if Demo user uploaded a custom file
     display_matrix = sku_matrix.copy()
     if demo_paywall_active:
         display_matrix["SKU"] = [f"LOCKED-{i+1:02d}" for i in range(len(display_matrix))]
@@ -1447,11 +1463,11 @@ def main_portal():
     with bar_right:
         if demo_paywall_active:
             wa_unlock_xlsx = urllib.parse.quote(
-                f"Hi Ryan, I just ran a diagnostic on our POS file (${total_gross:,.2f} gross sales) and want to unlock our full SKU names and Excel Workbook."
+                f"Hi, I just ran a diagnostic on our POS file (${total_gross:,.2f} gross sales) and want to unlock our full SKU names and Excel Workbook."
             )
             st.link_button(
                 "Unlock Custom Excel Export (Client License)",
-                url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_unlock_xlsx}",
+                url=f"https://wa.me/{owner_wa}?text={wa_unlock_xlsx}",
                 type="primary",
                 use_container_width=True
             )
