@@ -210,6 +210,28 @@ def apply_obsidian_theme():
             color: #FCA5A5;
             line-height: 1.55;
         }
+        .paywall-card {
+            background: linear-gradient(180deg, #161F33 0%, #0D131F 100%);
+            border: 1px solid #2563EB;
+            border-left: 4px solid #38BDF8;
+            border-radius: 8px;
+            padding: 18px 22px;
+            margin-bottom: 1.25rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        }
+        .paywall-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #F8FAFC;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+        }
+        .paywall-sub {
+            font-size: 0.86rem;
+            color: #CBD5E1;
+            line-height: 1.55;
+        }
 
         .memo-card {
             background: linear-gradient(180deg, #111827 0%, #0D131F 100%);
@@ -306,10 +328,11 @@ apply_obsidian_theme()
 # ==============================================================================
 # MULTI-TENANT CLIENT DATABASE & ADMIN PERSISTENCE ENGINE
 # ==============================================================================
+# Only "demo" is public. Paid clients are created via Admin Console or st.secrets.
 DEFAULT_CLIENTS = {
     "demo": {
         "password": "demo123",
-        "company_name": "Beirut Hospitality Group",
+        "company_name": "Beirut Hospitality Group (Demo Sandbox)",
         "default_lbp_rate": 89500.0,
         "delivery_fee_pct": 25.0,
         "card_fee_pct": 2.0,
@@ -319,19 +342,7 @@ DEFAULT_CLIENTS = {
         "monthly_rent_usd": 1800.0,
         "monthly_payroll_usd": 2400.0,
         "monthly_generator_utilities_usd": 750.0,
-    },
-    "bistro_client": {
-        "password": "bistro2026",
-        "company_name": "Mar Mikhael Resto-Cafe",
-        "default_lbp_rate": 89500.0,
-        "delivery_fee_pct": 24.0,
-        "card_fee_pct": 1.8,
-        "whish_fee_pct": 1.0,
-        "packaging_cost_usd": 0.50,
-        "waste_pct": 2.5,
-        "monthly_rent_usd": 1600.0,
-        "monthly_payroll_usd": 2200.0,
-        "monthly_generator_utilities_usd": 650.0,
+        "demo_upload_mode": "teaser",  # "teaser" (redacted SKUs + no export) or "locked"
     }
 }
 
@@ -345,14 +356,12 @@ def get_admin_password() -> str:
 
 def get_client_db() -> dict:
     db = dict(DEFAULT_CLIENTS)
-    # 1. Merge permanent accounts from Streamlit Cloud Secrets
     try:
         if "clients" in st.secrets:
             for k, v in st.secrets["clients"].items():
                 db[str(k).strip().lower()] = dict(v)
     except Exception:
         pass
-    # 2. Merge dynamically created accounts from local JSON store
     if os.path.exists(CLIENTS_JSON_PATH):
         try:
             with open(CLIENTS_JSON_PATH, "r", encoding="utf-8") as f:
@@ -405,6 +414,8 @@ def load_client_cogs_df(username: str) -> pd.DataFrame | None:
 def format_secrets_toml(clients_dict: dict) -> str:
     lines = [f'admin_password = "{get_admin_password()}"', ""]
     for uname, p in clients_dict.items():
+        if uname == "demo":
+            continue
         lines.append(f"[clients.{uname}]")
         lines.append(f'password = "{p.get("password", "client123")}"')
         lines.append(f'company_name = "{p.get("company_name", uname)}"')
@@ -474,7 +485,7 @@ def login_screen():
         )
 
         with st.form("login_form"):
-            username = st.text_input("Account Identifier", placeholder="demo or admin").strip().lower()
+            username = st.text_input("Account Identifier", placeholder="Enter client username").strip().lower()
             password = st.text_input("Password", type="password", placeholder="••••••••")
             submit = st.form_submit_button("Sign In", use_container_width=True)
 
@@ -1041,16 +1052,15 @@ def render_admin_console():
     <div class="suite-header">
         <div class="suite-kicker">MASTER ADMINISTRATOR CONSOLE</div>
         <h1 class="suite-title">Client Account Provisioning & Multi-Tenant Manager</h1>
-        <div class="suite-subtitle">Create new client accounts, pre-load client SKU COGS sheets, generate 1-click client magic links, and export permanent cloud secrets.</div>
+        <div class="suite-subtitle">Create paid client accounts, pre-load client SKU COGS sheets, configure Demo Paywall behavior, and export permanent cloud secrets.</div>
     </div>
     """, unsafe_allow_html=True)
 
     clients_db = get_client_db()
-
     col_form, col_list = st.columns([1.35, 1.0])
 
     with col_form:
-        st.markdown("#### 1. Create or Update Client Account")
+        st.markdown("#### 1. Create or Update Paid Client Account")
         with st.form("create_client_form"):
             f1, f2 = st.columns(2)
             with f1:
@@ -1060,7 +1070,7 @@ def render_admin_console():
                 new_deliv_fee = st.number_input("Toters / Aggregator Fee (%)", value=25.0, step=0.5)
                 new_pkg_cost = st.number_input("Delivery Packaging / Unit ($)", value=0.65, step=0.05)
             with f2:
-                new_password = st.text_input("Client Password *", placeholder="e.g., rd2026")
+                new_password = st.text_input("Client Password *", placeholder="e.g., rd2026secure")
                 new_card_fee = st.number_input("Card POS Fee (%)", value=2.0, step=0.1)
                 new_whish_fee = st.number_input("Digital Wallet / Whish Fee (%)", value=1.0, step=0.1)
                 new_waste_pct = st.number_input("Kitchen Waste Allowance (%)", value=3.0, step=0.5)
@@ -1075,15 +1085,14 @@ def render_admin_console():
                 new_utilities = st.number_input("Generator & Utilities ($)", value=900.0, step=50.0)
 
             st.markdown("**Optional: Pre-Load Client Master SKU COGS File (.xlsx / .csv)**")
-            st.caption("If you upload their COGS sheet here, it attaches to their account automatically so they only ever need to upload 1 file (their weekly POS sales export).")
             admin_cogs_file = st.file_uploader("Upload Client COGS Sheet", type=["csv", "xlsx", "xls"])
 
-            save_btn = st.form_submit_button("Create / Update Client Account", type="primary", use_container_width=True)
+            save_btn = st.form_submit_button("Create / Update Paid Client Account", type="primary", use_container_width=True)
 
             if save_btn:
                 clean_u = re.sub(r"[^a-z0-9_-]", "", new_username)
-                if not clean_u or not new_password or not new_company:
-                    st.error("Please provide a valid Username, Password, and Company Name.")
+                if not clean_u or clean_u == "demo" or not new_password or not new_company:
+                    st.error("Please provide a valid non-demo Username, Password, and Company Name.")
                 else:
                     profile_payload = {
                         "password": new_password.strip(),
@@ -1114,25 +1123,37 @@ def render_admin_console():
                         })
                         save_client_cogs_df(clean_u, std_c)
 
-                    st.success(f"Account `{clean_u}` ({new_company}) is now live!")
+                    st.success(f"Paid Client Account `{clean_u}` ({new_company}) is now live with full unlocked access!")
                     st.rerun()
 
     with col_list:
-        st.markdown("#### 2. Active Client Accounts & Onboarding Links")
+        st.markdown("#### 2. Demo Paywall & Active Client Accounts")
+        demo_prof = clients_db.get("demo", DEFAULT_CLIENTS["demo"])
+        cur_demo_mode = demo_prof.get("demo_upload_mode", "teaser")
+        new_demo_mode = st.radio(
+            "When a public `demo` visitor clicks 'Upload Custom POS File':",
+            ["teaser", "locked"],
+            index=0 if cur_demo_mode == "teaser" else 1,
+            format_func=lambda m: "Teaser Diagnostic Mode (Shows Total Leakage $, Redacts SKU Names & Locks Excel Export)" if m == "teaser" else "Strict Lock Mode (Blocks File Uploader Completely on Demo Accounts)"
+        )
+        if new_demo_mode != cur_demo_mode:
+            demo_prof["demo_upload_mode"] = new_demo_mode
+            save_client_to_store("demo", demo_prof)
+            st.rerun()
+
         rows = []
         for u, p in clients_db.items():
-            has_cogs = "Yes (Pre-Loaded)" if load_client_cogs_df(u) is not None else "Standard"
+            has_cogs = "Pre-Loaded" if load_client_cogs_df(u) is not None else "Standard"
             rows.append({
                 "Username": u,
+                "Tier": "Public Sandbox (Paywalled)" if u == "demo" else "Paid License (Unlocked)",
                 "Password": p.get("password", ""),
                 "Company": p.get("company_name", ""),
-                "Delivery Fee": f"{p.get('delivery_fee_pct', 25.0):.1f}%",
-                "Monthly OPEX": f"${p.get('monthly_rent_usd', 0) + p.get('monthly_payroll_usd', 0) + p.get('monthly_generator_utilities_usd', 0):,.0f}",
                 "Saved COGS": has_cogs
             })
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
-        selected_client = st.selectbox("Select Client to Generate Onboarding Package or Preview", list(clients_db.keys()))
+        selected_client = st.selectbox("Select Account to Generate Onboarding Link or Preview", list(clients_db.keys()))
         sel_p = clients_db[selected_client]
         magic_client_url = f"https://exec-pos-audit.streamlit.app/?client={selected_client}&key={urllib.parse.quote(str(sel_p['password']))}"
 
@@ -1147,22 +1168,21 @@ def render_admin_console():
 
         b_act1, b_act2, b_act3 = st.columns(3)
         with b_act1:
-            if st.button("Impersonate / Preview Client", use_container_width=True):
+            if st.button("Preview Account", use_container_width=True):
                 st.session_state.client_profile = sel_p
                 st.session_state.username = selected_client
-                st.session_state.impersonating = True
                 st.rerun()
         with b_act2:
             wa_onboard_url = f"https://wa.me/?text={urllib.parse.quote(onboarding_text)}"
             st.link_button("Send Login via WhatsApp", url=wa_onboard_url, use_container_width=True)
         with b_act3:
-            if selected_client not in ["demo", "bistro_client"]:
+            if selected_client != "demo":
                 if st.button("Delete Account", use_container_width=True):
                     delete_client_from_store(selected_client)
                     st.rerun()
 
         with st.expander("Permanent Cloud Backup (Streamlit Secrets TOML)"):
-            st.caption("Copy and paste this block into Streamlit Cloud -> Settings -> Secrets so all accounts persist permanently across server redeployments.")
+            st.caption("Copy and paste this block into Streamlit Cloud -> Settings -> Secrets so all paid accounts persist permanently.")
             st.code(format_secrets_toml(clients_db), language="toml")
 
 # ==============================================================================
@@ -1172,10 +1192,12 @@ def main_portal():
     profile = st.session_state.client_profile
     company_name = profile["company_name"]
     is_admin = st.session_state.get("is_admin", False)
+    is_demo_account = (st.session_state.username == "demo") and (not is_admin)
 
     with st.sidebar:
         st.markdown(f"<div style='font-size:1.05rem; font-weight:700; color:#F8FAFC; margin-bottom:2px;'>{company_name}</div>", unsafe_allow_html=True)
-        st.caption(f"Account: `{st.session_state.username}`" + (" (MASTER ADMIN)" if is_admin else ""))
+        tier_label = "MASTER ADMIN" if is_admin else ("DEMO SANDBOX" if is_demo_account else "VERIFIED CLIENT LICENSE")
+        st.caption(f"Account: `{st.session_state.username}` ({tier_label})")
 
         role_options = ["CFO / Executive View", "Branch Manager (Cash Recon)"]
         if is_admin:
@@ -1201,20 +1223,18 @@ def main_portal():
             monthly_utilities = st.number_input("Generator & Utilities ($)", min_value=0.0, value=float(profile.get("monthly_generator_utilities_usd", 750.0)), step=50.0)
 
         st.divider()
-        wa_msg = urllib.parse.quote("Hi Ryan, I reviewed the Executive POS & EBITDA Suite and would like to configure a custom audit for our branches.")
-        st.link_button("Request Custom Deployment", url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_msg}", use_container_width=True)
+        wa_msg = urllib.parse.quote("Hi Ryan, I tested the Executive POS & EBITDA Suite and want to activate a private client license for our branches.")
+        st.link_button("Activate Private Client License", url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_msg}", use_container_width=True)
         if st.button("Sign Out", use_container_width=True):
             st.query_params.clear()
             st.session_state.authenticated = False
             st.session_state.is_admin = False
             st.rerun()
 
-    # If Master Admin selected the Provisioning Console
     if role == "Master Admin: Client Provisioning":
         render_admin_console()
         return
 
-    # Top Workspace Header & Aligned Data Source Selector
     top_left, top_right = st.columns([2.0, 1.4], vertical_alignment="center")
     with top_left:
         st.markdown(f"""
@@ -1231,10 +1251,40 @@ def main_portal():
             label_visibility="collapsed"
         )
 
+    # Check if a public Demo visitor is trying to use Custom File Upload
+    is_custom_upload = (mode == "Upload Custom POS File")
+    demo_paywall_active = is_demo_account and is_custom_upload
+    demo_upload_mode = profile.get("demo_upload_mode", "teaser")
+
+    if demo_paywall_active and demo_upload_mode == "locked":
+        st.markdown("""
+        <div class="paywall-card">
+            <div class="paywall-title">Custom POS Ingestion Locked — Client License Required</div>
+            <div class="paywall-sub">
+                Direct POS file ingestion (.xlsx / .csv), automated COGS mapping, and custom Executive Workbook exports are restricted to verified client accounts.
+                Send 1 anonymized week of your POS export via WhatsApp below to receive your complimentary 7-day audit and activate your private login.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        wa_unlock = urllib.parse.quote("Hi Ryan, I am on the POS Suite Demo and would like to send 1 week of our POS export for a complimentary audit and private login.")
+        st.link_button("Request Complimentary Audit & Private Login via WhatsApp", url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_unlock}", type="primary")
+        return
+
     std_pos, std_cogs = None, None
     preloaded_client_cogs = load_client_cogs_df(st.session_state.username)
 
-    if mode == "Upload Custom POS File":
+    if is_custom_upload:
+        if demo_paywall_active:
+            st.markdown("""
+            <div class="paywall-card">
+                <div class="paywall-title">Demo Diagnostic Preview Mode Active</div>
+                <div class="paywall-sub">
+                    You may upload a sample POS file below to calculate your top-line commission leakage and monthly EBITDA recovery potential.
+                    <strong>Individual SKU names, operator audit logs, and Excel Workbook (.xlsx) downloads are redacted on Demo accounts.</strong>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
         u_col1, u_col2 = st.columns(2)
         with u_col1:
             pos_file = st.file_uploader("1. Raw POS Export (.xlsx, .xls, .csv) [Required]", type=["csv", "xlsx", "xls"])
@@ -1348,6 +1398,12 @@ def main_portal():
 
     sku_matrix = build_bcg_menu_matrix(cleaned_df)
 
+    # Redact SKU & Cashier names if Demo user uploaded a custom file
+    display_matrix = sku_matrix.copy()
+    if demo_paywall_active:
+        display_matrix["SKU"] = [f"LOCKED-{i+1:02d}" for i in range(len(display_matrix))]
+        display_matrix["Item_Name"] = [f"[REDACTED SKU #{i+1} — Client License Required]" for i in range(len(display_matrix))]
+
     if role == "Branch Manager (Cash Recon)":
         st.markdown('<div class="exec-banner"><strong>Branch Manager View:</strong> Supplier COGS and Executive EBITDA are hidden. Displaying Shift Cash Drawer Reconciliation.</div>', unsafe_allow_html=True)
         branches_list = ["All Branches"] + sorted(cleaned_df["Branch"].unique().tolist())
@@ -1389,15 +1445,26 @@ def main_portal():
     with bar_left:
         st.caption(f"Normalized ledger across {active_days} active day(s) at {lbp_rate:,.0f} LBP/USD.")
     with bar_right:
-        excel_bytes = build_excel_in_memory(cleaned_df, sku_matrix, company_name, lbp_rate, prorated_opex_dict)
-        st.download_button(
-            label="Export Executive Workbook (.xlsx)",
-            data=excel_bytes,
-            file_name=f"{company_name.replace(' ', '_')}_Financial_Audit.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary",
-            use_container_width=True
-        )
+        if demo_paywall_active:
+            wa_unlock_xlsx = urllib.parse.quote(
+                f"Hi Ryan, I just ran a diagnostic on our POS file (${total_gross:,.2f} gross sales) and want to unlock our full SKU names and Excel Workbook."
+            )
+            st.link_button(
+                "Unlock Custom Excel Export (Client License)",
+                url=f"https://wa.me/{OWNER_WHATSAPP}?text={wa_unlock_xlsx}",
+                type="primary",
+                use_container_width=True
+            )
+        else:
+            excel_bytes = build_excel_in_memory(cleaned_df, sku_matrix, company_name, lbp_rate, prorated_opex_dict)
+            st.download_button(
+                label="Export Executive Workbook (.xlsx)",
+                data=excel_bytes,
+                file_name=f"{company_name.replace(' ', '_')}_Financial_Audit.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True
+            )
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "Menu Engineering (BCG)",
@@ -1421,7 +1488,7 @@ def main_portal():
             )
 
         st.dataframe(
-            sku_matrix,
+            display_matrix,
             hide_index=True,
             use_container_width=True,
             column_config={
@@ -1447,13 +1514,13 @@ def main_portal():
 
         sim_col1, sim_col2, sim_col3 = st.columns(3)
         with sim_col1:
-            selected_item = st.selectbox("Select SKU to Model", sku_matrix["Item_Name"].tolist())
+            selected_item = st.selectbox("Select SKU to Model", display_matrix["Item_Name"].tolist())
         with sim_col2:
             price_increase = st.slider("Proposed Price Increase (+USD)", 0.25, 5.00, 1.25, 0.25)
         with sim_col3:
             volume_dropoff_pct = st.slider("Assumed Volume Dropoff (%)", 0.0, 30.0, 5.0, 1.0) / 100.0
 
-        item_row = sku_matrix[sku_matrix["Item_Name"] == selected_item].iloc[0]
+        item_row = display_matrix[display_matrix["Item_Name"] == selected_item].iloc[0]
         cur_monthly_units = item_row["Units_Sold"] * (30.0 / active_days)
         cur_unit_price = item_row["Avg_Unit_Price_USD"]
         cur_unit_contrib = item_row["Unit_Contribution_USD"]
@@ -1567,6 +1634,9 @@ def main_portal():
             Total_Discounts_USD=("Discount_USD", "sum"),
             Discounted_Orders=("Discount_USD", lambda s: int((s > 0).sum()))
         )
+        if demo_paywall_active:
+            cashier_audit["Cashier_Server"] = [f"[REDACTED OPERATOR #{i+1}]" for i in range(len(cashier_audit))]
+
         cashier_audit["Discount_Rate_Pct"] = (
             cashier_audit["Total_Discounts_USD"] / (cashier_audit["Gross_Sales_USD"] + cashier_audit["Total_Discounts_USD"])
         ) * 100.0
@@ -1596,7 +1666,7 @@ def main_portal():
         memo_html, memo_wa_text = build_cfo_memo_content(
             memo_lang, company_name, active_days, total_gross, total_fees_pkg,
             true_ebitda, ebitda_margin_pct, daily_breakeven_sales,
-            sku_matrix, aggregator_hold_val
+            display_matrix, aggregator_hold_val
         )
         st.markdown(memo_html, unsafe_allow_html=True)
 
