@@ -8,6 +8,11 @@ from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
 
+try:
+    pd.options.future.infer_string = False
+except Exception:
+    pass
+
 # Force Streamlit base theme to Dark Mode for native canvas tables
 try:
     st._config.set_option("theme.base", "dark")
@@ -23,13 +28,16 @@ except Exception:
 # ==============================================================================
 st.set_page_config(
     page_title="Financial & POS Reconciliation Suite",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+APP_BASE_URL = "https://pos-margin-app-5dqt2eh8rz5vkti89awhnn.streamlit.app"
 CLIENTS_JSON_PATH = "clients_store.json"
 COGS_STORAGE_DIR = "client_cogs_store"
 os.makedirs(COGS_STORAGE_DIR, exist_ok=True)
+
 
 def get_secret(key: str, default: str = "") -> str:
     """Safely reads a key from Streamlit Cloud Secrets without exposing it in code."""
@@ -40,16 +48,20 @@ def get_secret(key: str, default: str = "") -> str:
         pass
     return default
 
+
 def get_admin_username() -> str:
     return get_secret("admin_username", "admin").lower()
+
 
 def get_admin_password() -> str | None:
     """Returns None if admin_password is not configured in Streamlit Secrets."""
     pw = get_secret("admin_password", "")
     return pw if pw else None
 
+
 def get_owner_whatsapp() -> str:
     return re.sub(r"[^0-9]", "", get_secret("owner_whatsapp", ""))
+
 
 # ==============================================================================
 # OBSIDIAN DARK DESIGN SYSTEM
@@ -341,6 +353,7 @@ def apply_obsidian_theme():
     </style>
     """, unsafe_allow_html=True)
 
+
 apply_obsidian_theme()
 
 # ==============================================================================
@@ -350,6 +363,7 @@ DEFAULT_CLIENTS = {
     "demo": {
         "password": "demo123",
         "company_name": "Beirut Hospitality Group (Demo Sandbox)",
+        "market": "Beirut",
         "default_lbp_rate": 89500.0,
         "delivery_fee_pct": 25.0,
         "card_fee_pct": 2.0,
@@ -360,11 +374,27 @@ DEFAULT_CLIENTS = {
         "monthly_payroll_usd": 2400.0,
         "monthly_generator_utilities_usd": 750.0,
         "demo_upload_mode": "teaser",
-    }
+    },
+    "dubai_demo": {
+        "password": "demo123",
+        "company_name": "Dubai Hospitality Group (Demo Sandbox)",
+        "market": "Dubai",
+        "default_lbp_rate": 3.6725,
+        "delivery_fee_pct": 25.0,
+        "card_fee_pct": 1.8,
+        "whish_fee_pct": 1.0,
+        "packaging_cost_usd": 0.75,
+        "waste_pct": 3.0,
+        "monthly_rent_usd": 4500.0,
+        "monthly_payroll_usd": 5200.0,
+        "monthly_generator_utilities_usd": 850.0,
+        "demo_upload_mode": "teaser",
+    },
 }
 
+
 def get_client_db() -> dict:
-    db = dict(DEFAULT_CLIENTS)
+    db = {k: dict(v) for k, v in DEFAULT_CLIENTS.items()}
     try:
         if "clients" in st.secrets:
             for k, v in st.secrets["clients"].items():
@@ -381,6 +411,7 @@ def get_client_db() -> dict:
             pass
     return db
 
+
 def save_client_to_store(username: str, profile_data: dict):
     clean_user = username.strip().lower()
     existing = {}
@@ -393,6 +424,7 @@ def save_client_to_store(username: str, profile_data: dict):
     existing[clean_user] = profile_data
     with open(CLIENTS_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(existing, f, indent=2)
+
 
 def delete_client_from_store(username: str):
     clean_user = username.strip().lower()
@@ -407,9 +439,11 @@ def delete_client_from_store(username: str):
         except Exception:
             pass
 
+
 def save_client_cogs_df(username: str, std_cogs_df: pd.DataFrame):
     path = os.path.join(COGS_STORAGE_DIR, f"cogs_{username.strip().lower()}.csv")
     std_cogs_df.to_csv(path, index=False, encoding="utf-8")
+
 
 def load_client_cogs_df(username: str) -> pd.DataFrame | None:
     path = os.path.join(COGS_STORAGE_DIR, f"cogs_{username.strip().lower()}.csv")
@@ -419,6 +453,7 @@ def load_client_cogs_df(username: str) -> pd.DataFrame | None:
         except Exception:
             return None
     return None
+
 
 def format_secrets_toml(clients_dict: dict) -> str:
     lines = [
@@ -445,6 +480,7 @@ def format_secrets_toml(clients_dict: dict) -> str:
         lines.append("")
     return "\n".join(lines)
 
+
 # ==============================================================================
 # ZERO-FRICTION URL AUTO-LOGIN (?demo=true or ?client=...) & SESSION STATE
 # ==============================================================================
@@ -456,21 +492,30 @@ if "authenticated" not in st.session_state:
 
 query_params = st.query_params
 if not st.session_state.authenticated:
-    if query_params.get("demo", "").lower() in ["1", "true", "yes"]:
+    demo_param = str(query_params.get("demo", "")).strip().lower()
+    market_param = str(query_params.get("market", query_params.get("city", ""))).strip().title()
+    company_param = str(query_params.get("company", "")).strip()
+
+    if demo_param in ["1", "true", "yes"] or market_param in ["Beirut", "Dubai"] or company_param:
         clients = get_client_db()
+        base_key = "dubai_demo" if market_param == "Dubai" else "demo"
+        profile = dict(clients.get(base_key, clients["demo"]))
+        if company_param:
+            profile["company_name"] = f"{company_param} (Live Demo Audit)"
         st.session_state.authenticated = True
         st.session_state.username = "demo"
-        st.session_state.client_profile = clients["demo"]
+        st.session_state.client_profile = profile
         st.session_state.is_admin = False
     elif "client" in query_params and "key" in query_params:
-        c_user = query_params.get("client", "").strip().lower()
-        c_key = query_params.get("key", "")
+        c_user = str(query_params.get("client", "")).strip().lower()
+        c_key = str(query_params.get("key", ""))
         clients = get_client_db()
         if c_user in clients and clients[c_user]["password"] == c_key:
             st.session_state.authenticated = True
             st.session_state.username = c_user
-            st.session_state.client_profile = clients[c_user]
+            st.session_state.client_profile = dict(clients[c_user])
             st.session_state.is_admin = False
+
 
 def login_screen():
     st.write("")
@@ -484,13 +529,23 @@ def login_screen():
         </div>
         """, unsafe_allow_html=True)
 
-        if st.button("Launch Interactive Demo Environment", type="primary", use_container_width=True):
-            clients = get_client_db()
-            st.session_state.authenticated = True
-            st.session_state.username = "demo"
-            st.session_state.client_profile = clients["demo"]
-            st.session_state.is_admin = False
-            st.rerun()
+        d_col1, d_col2 = st.columns(2)
+        with d_col1:
+            if st.button("🇱🇧 Launch Beirut Demo", type="primary", use_container_width=True):
+                clients = get_client_db()
+                st.session_state.authenticated = True
+                st.session_state.username = "demo"
+                st.session_state.client_profile = dict(clients["demo"])
+                st.session_state.is_admin = False
+                st.rerun()
+        with d_col2:
+            if st.button("🇦🇪 Launch Dubai Demo", type="primary", use_container_width=True):
+                clients = get_client_db()
+                st.session_state.authenticated = True
+                st.session_state.username = "demo"
+                st.session_state.client_profile = dict(clients.get("dubai_demo", clients["demo"]))
+                st.session_state.is_admin = False
+                st.rerun()
 
         st.markdown(
             "<div style='text-align:center; color:#64748B; font-size:0.72rem; margin: 18px 0; "
@@ -511,7 +566,7 @@ def login_screen():
                     clients = get_client_db()
                     st.session_state.authenticated = True
                     st.session_state.username = admin_user
-                    st.session_state.client_profile = clients["demo"]
+                    st.session_state.client_profile = dict(clients["demo"])
                     st.session_state.is_admin = True
                     st.rerun()
 
@@ -519,11 +574,12 @@ def login_screen():
                 if username in clients and clients[username]["password"] == password:
                     st.session_state.authenticated = True
                     st.session_state.username = username
-                    st.session_state.client_profile = clients[username]
+                    st.session_state.client_profile = dict(clients[username])
                     st.session_state.is_admin = False
                     st.rerun()
                 else:
-                    st.error("Invalid credentials. Use the button above to launch the demo environment.")
+                    st.error("Invalid credentials. Use the buttons above to launch the demo environment.")
+
 
 # ==============================================================================
 # FILE PARSING & DATA NORMALIZATION
@@ -547,6 +603,7 @@ def safe_read_file(uploaded_file) -> pd.DataFrame:
     uploaded_file.seek(0)
     return pd.read_csv(uploaded_file)
 
+
 def guess_column_index(columns: list, keywords: list, allow_none: bool = False) -> int:
     offset = 1 if allow_none else 0
     for idx, col in enumerate(columns):
@@ -556,17 +613,18 @@ def guess_column_index(columns: list, keywords: list, allow_none: bool = False) 
                 return idx + offset
     return 0
 
+
 def clean_numeric_series(series: pd.Series, default_val: float = 0.0) -> pd.Series:
     def parse_val(val):
         if pd.isna(val):
-            return default_val
+            return float(default_val)
         s = str(val).strip()
         if not s:
-            return default_val
+            return float(default_val)
         is_neg = s.startswith("(") and s.endswith(")")
         s = re.sub(r"[^0-9.,-]", "", s)
         if not s:
-            return default_val
+            return float(default_val)
         if "," in s and "." not in s:
             parts = s.split(",")
             if len(parts) == 2 and len(parts[1]) == 2:
@@ -577,68 +635,90 @@ def clean_numeric_series(series: pd.Series, default_val: float = 0.0) -> pd.Seri
             s = s.replace(",", "")
         try:
             num = float(s)
-            return -abs(num) if is_neg else num
+            return float(-abs(num) if is_neg else num)
         except Exception:
-            return default_val
+            return float(default_val)
 
-    return series.apply(parse_val)
+    return pd.to_numeric(series.apply(parse_val), errors="coerce").fillna(float(default_val)).astype("float64")
+
 
 def classify_channel_and_fee(raw_channel: str, delivery_fee: float, card_fee: float, whish_fee: float):
     c = str(raw_channel).strip().lower()
     if any(k in c for k in ["toter", "talabat", "deliveroo", "careem", "noon", "zomato", "jahez", "hunger", "aggregat", "delivery"]):
-        return "Delivery Aggregators", delivery_fee, True
-    if any(k in c for k in ["whish", "wish", "omt", "bob", "wallet"]):
-        return "Digital Wallet (Whish)", whish_fee, False
-    if any(k in c for k in ["card", "visa", "master", "amex", "pos", "bank", "carte", "credit", "debit"]):
-        return "Card POS Terminal", card_fee, False
+        return "Delivery Aggregators", float(delivery_fee), True
+    if any(k in c for k in ["whish", "wish", "omt", "bob", "wallet", "apple pay", "tap"]):
+        return "Digital Wallet (Whish)", float(whish_fee), False
+    if any(k in c for k in ["card", "visa", "master", "amex", "pos", "bank", "carte", "credit", "debit", "network"]):
+        return "Card POS Terminal", float(card_fee), False
     return "In-Store Cash", 0.0, False
+
 
 # ==============================================================================
 # SAMPLE DATA GENERATOR
 # ==============================================================================
 @st.cache_data
-def generate_sample_datasets(lbp_rate: float):
-    cogs_data = [
-        {"SKU": "SKU-101", "Item_Name": "Signature Truffle Burger", "Category": "Mains", "Unit_Cost_USD": 4.20, "Menu_Price_USD": 13.50},
-        {"SKU": "SKU-102", "Item_Name": "Crispy Chicken Sliders", "Category": "Mains", "Unit_Cost_USD": 4.80, "Menu_Price_USD": 9.50},
-        {"SKU": "SKU-103", "Item_Name": "Artisanal Kale & Quinoa Salad", "Category": "Salads", "Unit_Cost_USD": 2.40, "Menu_Price_USD": 11.00},
-        {"SKU": "SKU-104", "Item_Name": "Loaded Parmesan Fries", "Category": "Sides", "Unit_Cost_USD": 1.10, "Menu_Price_USD": 5.50},
-        {"SKU": "SKU-105", "Item_Name": "Combo Meal Box (Aggregator Promo)", "Category": "Promos", "Unit_Cost_USD": 8.90, "Menu_Price_USD": 13.00},
-        {"SKU": "SKU-106", "Item_Name": "Specialty Iced Matcha Latte", "Category": "Beverages", "Unit_Cost_USD": 1.30, "Menu_Price_USD": 5.50},
-    ]
+def generate_sample_datasets(lbp_rate: float, market: str = "Beirut"):
+    if market == "Dubai":
+        cogs_data = [
+            {"SKU": "SKU-101", "Item_Name": "Double Wagyu Smash Burger", "Category": "Mains", "Unit_Cost_USD": 4.40, "Menu_Price_USD": 13.50},
+            {"SKU": "SKU-102", "Item_Name": "Nashville Hot Chicken Sliders", "Category": "Mains", "Unit_Cost_USD": 4.90, "Menu_Price_USD": 9.80},
+            {"SKU": "SKU-103", "Item_Name": "Burrata & Heirloom Tomato Bowl", "Category": "Salads", "Unit_Cost_USD": 2.60, "Menu_Price_USD": 11.50},
+            {"SKU": "SKU-104", "Item_Name": "Truffle Parmesan Crinkle Fries", "Category": "Sides", "Unit_Cost_USD": 1.15, "Menu_Price_USD": 5.50},
+            {"SKU": "SKU-105", "Item_Name": "2-For-1 Aggregator Meal Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 9.10, "Menu_Price_USD": 13.50},
+            {"SKU": "SKU-106", "Item_Name": "Spanish Saffron Iced Latte", "Category": "Beverages", "Unit_Cost_USD": 1.35, "Menu_Price_USD": 6.00},
+        ]
+        branches = ["Downtown Dubai", "JLT Cluster D", "Dubai Marina Walk"]
+        channels = ["In-Store Cash", "Apple Pay / Wallet", "Network Card POS", "Talabat Delivery", "Deliveroo / Careem"]
+    else:
+        cogs_data = [
+            {"SKU": "SKU-101", "Item_Name": "Signature Truffle Burger", "Category": "Mains", "Unit_Cost_USD": 4.20, "Menu_Price_USD": 13.50},
+            {"SKU": "SKU-102", "Item_Name": "Crispy Chicken Sliders", "Category": "Mains", "Unit_Cost_USD": 4.80, "Menu_Price_USD": 9.50},
+            {"SKU": "SKU-103", "Item_Name": "Artisanal Kale & Quinoa Salad", "Category": "Salads", "Unit_Cost_USD": 2.40, "Menu_Price_USD": 11.00},
+            {"SKU": "SKU-104", "Item_Name": "Loaded Parmesan Fries", "Category": "Sides", "Unit_Cost_USD": 1.10, "Menu_Price_USD": 5.50},
+            {"SKU": "SKU-105", "Item_Name": "Combo Meal Box (Aggregator Promo)", "Category": "Promos", "Unit_Cost_USD": 8.90, "Menu_Price_USD": 13.00},
+            {"SKU": "SKU-106", "Item_Name": "Specialty Iced Matcha Latte", "Category": "Beverages", "Unit_Cost_USD": 1.30, "Menu_Price_USD": 5.50},
+        ]
+        branches = ["Ashrafieh Flagship", "Mar Mikhael Branch", "Dbayeh Highway"]
+        channels = ["In-Store Cash", "Whish Money", "Bank Card POS", "Toters Delivery", "Talabat / Deliveroo"]
+
     cogs_df = pd.DataFrame(cogs_data)
     sku_weights = [0.26, 0.20, 0.09, 0.19, 0.16, 0.10]
-
-    branches = ["Ashrafieh Flagship", "Mar Mikhael Branch", "Dbayeh Highway"]
     cashiers = ["Nabil K.", "Maya S.", "Rami H.", "System_Aggregator"]
-    channels = ["In-Store Cash", "Whish Money", "Bank Card POS", "Toters Delivery", "Talabat / Deliveroo"]
     channel_weights = [0.32, 0.18, 0.15, 0.23, 0.12]
 
-    random.seed(42)
+    rng = random.Random(42)
     rows = []
     start_date = datetime(2026, 10, 1)
 
     for i in range(1, 621):
-        sku_info = random.choices(cogs_data, weights=sku_weights)[0]
-        qty = random.choices([1, 2, 3, 4], weights=[0.50, 0.32, 0.12, 0.06])[0]
-        channel = random.choices(channels, weights=channel_weights)[0]
-        branch = random.choice(branches)
-        cashier = "System_Aggregator" if "Toters" in channel or "Talabat" in channel else random.choice(cashiers[:3])
-        tx_date = start_date + timedelta(days=random.randint(0, 14))
+        sku_info = rng.choices(cogs_data, weights=sku_weights)[0]
+        qty = rng.choices([1, 2, 3, 4], weights=[0.50, 0.32, 0.12, 0.06])[0]
+        channel = rng.choices(channels, weights=channel_weights)[0]
+        branch = rng.choice(branches)
+        cashier = "System_Aggregator" if any(k in channel for k in ["Toters", "Talabat", "Deliveroo"]) else rng.choice(cashiers[:3])
+        tx_date = start_date + timedelta(days=rng.randint(0, 14))
         date_str = tx_date.strftime("%Y-%m-%d")
 
-        is_lbp = (channel == "In-Store Cash") and (random.random() < 0.35)
         list_gross_usd = sku_info["Menu_Price_USD"] * qty
 
         discount_usd = 0.0
-        if cashier == "Rami H." and channel == "In-Store Cash" and random.random() < 0.25:
-            discount_usd = round(list_gross_usd * random.choice([0.20, 0.40, 0.50]), 2)
-        elif random.random() < 0.03:
+        if cashier == "Rami H." and channel == "In-Store Cash" and rng.random() < 0.25:
+            discount_usd = round(list_gross_usd * rng.choice([0.20, 0.40, 0.50]), 2)
+        elif rng.random() < 0.03:
             discount_usd = round(list_gross_usd * 0.10, 2)
 
         net_charged_usd = max(0.0, list_gross_usd - discount_usd)
-        currency = "LBP" if is_lbp else "USD"
-        raw_amount = round(net_charged_usd * lbp_rate, -3) if is_lbp else net_charged_usd
+
+        if market == "Dubai":
+            is_local = rng.random() < 0.75
+            currency = "AED" if is_local else "USD"
+            fx = lbp_rate if lbp_rate < 100 else 3.6725
+            raw_amount = round(net_charged_usd * fx, 2) if is_local else net_charged_usd
+        else:
+            is_lbp = (channel == "In-Store Cash") and (rng.random() < 0.35)
+            currency = "LBP" if is_lbp else "USD"
+            fx = lbp_rate if lbp_rate >= 100 else 89500.0
+            raw_amount = round(net_charged_usd * fx, -3) if is_lbp else net_charged_usd
 
         rows.append({
             "Order_ID": f"ORD-{10000 + i}",
@@ -656,8 +736,9 @@ def generate_sample_datasets(lbp_rate: float):
 
     return pd.DataFrame(rows), cogs_df
 
+
 # ==============================================================================
-# CORE FINANCIAL & BCG MATRIX ENGINE
+# CORE FINANCIAL & BCG MATRIX ENGINE (PANDAS 3.0 / PYTHON 3.14 SAFE)
 # ==============================================================================
 def process_standardized_data(
     std_pos: pd.DataFrame,
@@ -675,69 +756,93 @@ def process_standardized_data(
     parsed_dates = pd.to_datetime(df["Date"], format="mixed", dayfirst=True, errors="coerce")
     df["Clean_Date"] = parsed_dates.dt.strftime("%Y-%m-%d").fillna(datetime.today().strftime("%Y-%m-%d"))
     df["Branch"] = df["Branch"].astype(str).str.strip()
-    df["Cashier_Server"] = df.get("Cashier_Server", pd.Series(["Standard_POS"] * len(df))).astype(str).str.strip()
+    df["Cashier_Server"] = df.get("Cashier_Server", pd.Series(["Standard_POS"] * len(df), index=df.index)).astype(str).str.strip()
 
-    df["Quantity"] = clean_numeric_series(df["Quantity"], default_val=1.0)
-    df.loc[df["Quantity"] <= 0, "Quantity"] = 1.0
+    qty_series = clean_numeric_series(df["Quantity"], default_val=1.0)
+    df["Quantity"] = qty_series.where(qty_series > 0, 1.0).astype("float64")
     df["Gross_Amount_Raw"] = clean_numeric_series(df["Gross_Amount_Raw"], default_val=0.0)
-    df["Discount_USD"] = clean_numeric_series(df.get("Discount_USD", pd.Series([0.0] * len(df))), default_val=0.0)
+    df["Discount_USD"] = clean_numeric_series(df.get("Discount_USD", pd.Series([0.0] * len(df), index=df.index)), default_val=0.0)
+
+    safe_rate = float(lbp_rate) if lbp_rate and lbp_rate > 0 else 89500.0
 
     def calc_usd(row):
         curr = str(row["Currency"]).strip().upper()
         amt = float(row["Gross_Amount_Raw"])
-        if "LBP" in curr or "LL" in curr or "L.L" in curr:
-            return amt / lbp_rate
-        if curr == "AUTO" and amt >= 10000:
-            return amt / lbp_rate
+        if any(k in curr for k in ["LBP", "LL", "L.L"]):
+            return amt / (safe_rate if safe_rate >= 100 else 89500.0)
+        if any(k in curr for k in ["AED", "DHS", "DH"]):
+            return amt / (safe_rate if safe_rate < 100 else 3.6725)
+        if curr == "AUTO":
+            if amt >= 10000:
+                return amt / (safe_rate if safe_rate >= 100 else 89500.0)
+            if safe_rate < 100:
+                return amt / safe_rate
         return amt
 
-    df["Gross_Sales_USD"] = df.apply(calc_usd, axis=1)
-    df = df[df["Gross_Sales_USD"] > 0].copy()
-    df["Unit_Cost_USD"] = None
-    df["Category"] = "General"
+    df["Gross_Sales_USD"] = pd.to_numeric(df.apply(calc_usd, axis=1), errors="coerce").fillna(0.0).astype("float64")
+    df = df[df["Gross_Sales_USD"] > 0].copy().reset_index(drop=True)
+
+    # Pandas 3.0 / StringDtype safe COGS & Category mapping (avoids in-place .loc dtype clashes)
+    cost_series = pd.Series(float("nan"), index=df.index, dtype="float64")
+    cat_series = pd.Series("General", index=df.index, dtype="object")
 
     if std_cogs is not None and not std_cogs.empty:
         cogs_clean = std_cogs.copy()
         cogs_clean["Unit_Cost_USD"] = clean_numeric_series(cogs_clean["Unit_Cost_USD"], default_val=0.0)
 
-        if "SKU" in cogs_clean.columns and (df["SKU"] != "N/A").any():
-            sku_map = cogs_clean.drop_duplicates(subset=["SKU"]).set_index("SKU")
-            df["Unit_Cost_USD"] = df["SKU"].map(sku_map["Unit_Cost_USD"])
-            if "Category" in sku_map.columns:
-                df["Category"] = df["SKU"].map(sku_map["Category"]).fillna("General")
+        if "SKU" in cogs_clean.columns and (df["SKU"].astype(str) != "N/A").any():
+            cogs_clean["_sku_key"] = cogs_clean["SKU"].astype(str).str.strip()
+            sku_dedup = cogs_clean.drop_duplicates(subset=["_sku_key"])
+            sku_cost_dict = dict(zip(sku_dedup["_sku_key"], sku_dedup["Unit_Cost_USD"]))
+            df_sku_keys = df["SKU"].astype(str).str.strip()
+            cost_series = pd.to_numeric(df_sku_keys.map(sku_cost_dict), errors="coerce").astype("float64")
+
+            if "Category" in sku_dedup.columns:
+                sku_cat_dict = dict(zip(sku_dedup["_sku_key"], sku_dedup["Category"].astype(str)))
+                cat_series = df_sku_keys.map(sku_cat_dict).fillna("General").astype(str)
 
         if "Item_Name" in cogs_clean.columns:
             cogs_clean["_item_key"] = cogs_clean["Item_Name"].astype(str).str.strip().str.lower()
-            name_map = cogs_clean.drop_duplicates(subset=["_item_key"]).set_index("_item_key")
-            df["_item_key"] = df["Item_Name"].astype(str).str.strip().str.lower()
+            name_dedup = cogs_clean.drop_duplicates(subset=["_item_key"])
+            name_cost_dict = dict(zip(name_dedup["_item_key"], name_dedup["Unit_Cost_USD"]))
+            df_item_keys = df["Item_Name"].astype(str).str.strip().str.lower()
+            name_cost_series = pd.to_numeric(df_item_keys.map(name_cost_dict), errors="coerce").astype("float64")
+            cost_series = cost_series.combine_first(name_cost_series).astype("float64")
 
-            missing_cost = df["Unit_Cost_USD"].isna()
-            df.loc[missing_cost, "Unit_Cost_USD"] = df.loc[missing_cost, "_item_key"].map(name_map["Unit_Cost_USD"])
-            if "Category" in name_map.columns:
-                df.loc[df["Category"] == "General", "Category"] = df.loc[df["Category"] == "General", "_item_key"].map(name_map["Category"]).fillna("General")
-            df.drop(columns=["_item_key"], inplace=True, errors="ignore")
+            if "Category" in name_dedup.columns:
+                name_cat_dict = dict(zip(name_dedup["_item_key"], name_dedup["Category"].astype(str)))
+                name_cat_series = df_item_keys.map(name_cat_dict).fillna("General").astype(str)
+                cat_series = cat_series.where(cat_series != "General", name_cat_series)
 
-    df["Raw_COGS_USD"] = df["Quantity"] * df["Unit_Cost_USD"]
-    unmatched = df["Raw_COGS_USD"].isna() | (df["Raw_COGS_USD"] <= 0)
-    df.loc[unmatched, "Raw_COGS_USD"] = df.loc[unmatched, "Gross_Sales_USD"] * fallback_cogs_pct
-    df.loc[unmatched, "Unit_Cost_USD"] = df.loc[unmatched, "Raw_COGS_USD"] / df.loc[unmatched, "Quantity"]
+    df["Unit_Cost_USD"] = cost_series.astype("float64")
+    df["Category"] = cat_series.fillna("General").astype(str)
 
-    df["Raw_COGS_USD"] = df["Raw_COGS_USD"] * (1.0 + supplier_inflation_pct)
-    df["Waste_Cost_USD"] = df["Raw_COGS_USD"] * waste_pct
-    df["Total_COGS_USD"] = df["Raw_COGS_USD"] + df["Waste_Cost_USD"]
+    raw_cogs = (df["Quantity"] * df["Unit_Cost_USD"]).astype("float64")
+    fallback_raw = (df["Gross_Sales_USD"] * float(fallback_cogs_pct)).astype("float64")
+    unmatched = raw_cogs.isna() | (raw_cogs <= 0)
 
-    ch_results = df["Channel"].apply(lambda c: classify_channel_and_fee(c, delivery_fee, card_fee, whish_fee))
+    df["Raw_COGS_USD"] = raw_cogs.where(~unmatched, fallback_raw).astype("float64")
+    df["Unit_Cost_USD"] = (df["Raw_COGS_USD"] / df["Quantity"]).astype("float64")
+
+    df["Raw_COGS_USD"] = (df["Raw_COGS_USD"] * (1.0 + float(supplier_inflation_pct))).astype("float64")
+    df["Waste_Cost_USD"] = (df["Raw_COGS_USD"] * float(waste_pct)).astype("float64")
+    df["Total_COGS_USD"] = (df["Raw_COGS_USD"] + df["Waste_Cost_USD"]).astype("float64")
+
+    ch_results = [classify_channel_and_fee(c, delivery_fee, card_fee, whish_fee) for c in df["Channel"]]
     df["Channel"] = [r[0] for r in ch_results]
-    df["Fee_Pct"] = [r[1] for r in ch_results]
-    df["Is_Delivery"] = [r[2] for r in ch_results]
+    df["Fee_Pct"] = pd.Series([r[1] for r in ch_results], index=df.index, dtype="float64")
+    df["Is_Delivery"] = pd.Series([r[2] for r in ch_results], index=df.index, dtype="bool")
 
-    df["Platform_Fee_USD"] = df["Gross_Sales_USD"] * df["Fee_Pct"]
-    df["Packaging_Cost_USD"] = df.apply(lambda r: r["Quantity"] * packaging_cost_usd if r["Is_Delivery"] else 0.0, axis=1)
-    df["Net_Revenue_USD"] = df["Gross_Sales_USD"] - df["Platform_Fee_USD"]
-    df["Net_Profit_USD"] = df["Net_Revenue_USD"] - df["Total_COGS_USD"] - df["Packaging_Cost_USD"]
-    df["Net_Margin_Pct"] = df["Net_Profit_USD"] / df["Gross_Sales_USD"]
+    df["Platform_Fee_USD"] = (df["Gross_Sales_USD"] * df["Fee_Pct"]).astype("float64")
+    df["Packaging_Cost_USD"] = (
+        df["Quantity"] * float(packaging_cost_usd) * df["Is_Delivery"].astype("float64")
+    ).astype("float64")
+    df["Net_Revenue_USD"] = (df["Gross_Sales_USD"] - df["Platform_Fee_USD"]).astype("float64")
+    df["Net_Profit_USD"] = (df["Net_Revenue_USD"] - df["Total_COGS_USD"] - df["Packaging_Cost_USD"]).astype("float64")
+    df["Net_Margin_Pct"] = (df["Net_Profit_USD"] / df["Gross_Sales_USD"]).astype("float64")
 
     return df
+
 
 def build_bcg_menu_matrix(df: pd.DataFrame) -> pd.DataFrame:
     sku_df = df.groupby(["SKU", "Item_Name", "Category"], as_index=False).agg(
@@ -769,8 +874,9 @@ def build_bcg_menu_matrix(df: pd.DataFrame) -> pd.DataFrame:
     sku_df["Classification"] = sku_df.apply(classify_bcg, axis=1)
     return sku_df.sort_values("Net_Profit_USD", ascending=False)
 
+
 # ==============================================================================
-# EXCEL WORKBOOK GENERATOR
+# EXCEL WORKBOOK GENERATOR (UPGRADED 4-TAB WITH CHARTS, TOTALS & AUTOFILTERS)
 # ==============================================================================
 def build_excel_in_memory(
     df: pd.DataFrame,
@@ -789,7 +895,7 @@ def build_excel_in_memory(
         Total_COGS_USD=("Total_COGS_USD", "sum"),
         Contribution_Profit_USD=("Net_Profit_USD", "sum")
     )
-    channel_summary["Margin_Pct"] = channel_summary["Contribution_Profit_USD"] / channel_summary["Gross_Sales_USD"]
+    channel_summary["Margin_Pct"] = channel_summary["Contribution_Profit_USD"] / channel_summary["Gross_Sales_USD"].replace(0, 1)
     channel_summary = channel_summary.sort_values(by="Contribution_Profit_USD", ascending=False)
 
     branch_summary = df.groupby("Branch", as_index=False).agg(
@@ -800,7 +906,8 @@ def build_excel_in_memory(
         Total_COGS_USD=("Total_COGS_USD", "sum"),
         Contribution_Profit_USD=("Net_Profit_USD", "sum")
     )
-    branch_summary["Margin_Pct"] = branch_summary["Contribution_Profit_USD"] / branch_summary["Gross_Sales_USD"]
+    branch_summary["Margin_Pct"] = branch_summary["Contribution_Profit_USD"] / branch_summary["Gross_Sales_USD"].replace(0, 1)
+    branch_summary = branch_summary.sort_values(by="Contribution_Profit_USD", ascending=False)
 
     daily_recon = df.pivot_table(
         index="Clean_Date",
@@ -808,7 +915,7 @@ def build_excel_in_memory(
         values="Net_Revenue_USD",
         aggfunc="sum",
         fill_value=0.0
-    ).reset_index()
+    ).reset_index().sort_values("Clean_Date")
     daily_recon["Total_Expected_Payout_USD"] = daily_recon.drop(columns=["Clean_Date"]).sum(axis=1)
 
     output = io.BytesIO()
@@ -824,21 +931,35 @@ def build_excel_in_memory(
         pct_fmt = wb.add_format({"num_format": "0.0%", "border": 1})
         int_fmt = wb.add_format({"num_format": "#,##0", "border": 1})
         text_fmt = wb.add_format({"border": 1})
+
+        total_text_fmt = wb.add_format({"bold": True, "bg_color": "#E2E8F0", "font_color": "#0F172A", "border": 1})
+        total_int_fmt = wb.add_format({"bold": True, "bg_color": "#E2E8F0", "font_color": "#0F172A", "num_format": "#,##0", "border": 1})
+        total_usd_fmt = wb.add_format({"bold": True, "bg_color": "#E2E8F0", "font_color": "#0F172A", "num_format": "$#,##0.00", "border": 1})
+        total_pct_fmt = wb.add_format({"bold": True, "bg_color": "#E2E8F0", "font_color": "#0F172A", "num_format": "0.0%", "border": 1})
+
         alert_red_fmt = wb.add_format({"bg_color": "#FEE2E2", "font_color": "#991B1B", "bold": True, "border": 1})
         alert_green_fmt = wb.add_format({"bg_color": "#DCFCE7", "font_color": "#166534", "bold": True, "border": 1})
         alert_warn_fmt = wb.add_format({"bg_color": "#FEF3C7", "font_color": "#92400E", "bold": True, "border": 1})
 
+        # TAB 1: 01_Executive_Summary
         ws_exec = wb.add_worksheet("01_Executive_Summary")
         ws_exec.hide_gridlines(2)
         ws_exec.write("B2", f"{company_name.upper()} — EXECUTIVE FINANCIAL SUMMARY", title_fmt)
-        ws_exec.write("B3", f"Normalized to USD (Rate: {lbp_rate:,.0f} LBP/USD | Active Days: {prorated_opex['days']})", subtitle_fmt)
+        fx_label = f"{lbp_rate:,.4f} AED/USD" if lbp_rate < 100 else f"{lbp_rate:,.0f} LBP/USD"
+        ws_exec.write("B3", f"Normalized to USD (Rate: {fx_label} | Active Days: {prorated_opex['days']})", subtitle_fmt)
 
+        total_orders = len(df)
+        total_units = df["Quantity"].sum()
         total_gross = df["Gross_Sales_USD"].sum()
-        total_fees_pkg = df["Platform_Fee_USD"].sum() + df["Packaging_Cost_USD"].sum()
+        total_fees = df["Platform_Fee_USD"].sum()
+        total_pkg = df["Packaging_Cost_USD"].sum()
+        total_fees_pkg = total_fees + total_pkg
+        total_net_rev = df["Net_Revenue_USD"].sum()
         total_cogs = df["Total_COGS_USD"].sum()
         contrib_profit = df["Net_Profit_USD"].sum()
+        contrib_margin = contrib_profit / total_gross if total_gross else 0.0
         ebitda_val = contrib_profit - prorated_opex["total_opex"]
-        ebitda_margin = ebitda_val / total_gross if total_gross else 0
+        ebitda_margin = ebitda_val / total_gross if total_gross else 0.0
 
         kpis = [
             ("GROSS REVENUE", total_gross, kpi_val_fmt),
@@ -870,7 +991,19 @@ def build_excel_in_memory(
             ws_exec.write(r_idx, 9, row.Contribution_Profit_USD, usd_fmt)
             ws_exec.write(r_idx, 10, row.Margin_Pct, pct_fmt)
 
-        b_row = start_row + len(channel_summary) + 3
+        ch_tot_row = start_row + len(channel_summary) + 1
+        ws_exec.write(ch_tot_row, 1, "TOTAL / BLENDED", total_text_fmt)
+        ws_exec.write(ch_tot_row, 2, total_orders, total_int_fmt)
+        ws_exec.write(ch_tot_row, 3, total_units, total_int_fmt)
+        ws_exec.write(ch_tot_row, 4, total_gross, total_usd_fmt)
+        ws_exec.write(ch_tot_row, 5, total_fees, total_usd_fmt)
+        ws_exec.write(ch_tot_row, 6, total_pkg, total_usd_fmt)
+        ws_exec.write(ch_tot_row, 7, total_net_rev, total_usd_fmt)
+        ws_exec.write(ch_tot_row, 8, total_cogs, total_usd_fmt)
+        ws_exec.write(ch_tot_row, 9, contrib_profit, total_usd_fmt)
+        ws_exec.write(ch_tot_row, 10, contrib_margin, total_pct_fmt)
+
+        b_row = ch_tot_row + 3
         ws_exec.write(b_row - 1, 1, "2. Branch Performance Breakdown", title_fmt)
         for col_idx, col_name in enumerate(branch_summary.columns):
             ws_exec.write(b_row, 1 + col_idx, col_name.replace("_", " "), header_fmt)
@@ -884,10 +1017,40 @@ def build_excel_in_memory(
             ws_exec.write(r_idx, 6, row.Total_COGS_USD, usd_fmt)
             ws_exec.write(r_idx, 7, row.Contribution_Profit_USD, usd_fmt)
             ws_exec.write(r_idx, 8, row.Margin_Pct, pct_fmt)
-        ws_exec.set_column("B:M", 18)
 
+        br_tot_row = b_row + len(branch_summary) + 1
+        ws_exec.write(br_tot_row, 1, "TOTAL / BLENDED", total_text_fmt)
+        ws_exec.write(br_tot_row, 2, total_orders, total_int_fmt)
+        ws_exec.write(br_tot_row, 3, total_gross, total_usd_fmt)
+        ws_exec.write(br_tot_row, 4, total_fees, total_usd_fmt)
+        ws_exec.write(br_tot_row, 5, total_pkg, total_usd_fmt)
+        ws_exec.write(br_tot_row, 6, total_cogs, total_usd_fmt)
+        ws_exec.write(br_tot_row, 7, contrib_profit, total_usd_fmt)
+        ws_exec.write(br_tot_row, 8, contrib_margin, total_pct_fmt)
+
+        chart_ch = wb.add_chart({"type": "column"})
+        num_ch = len(channel_summary)
+        chart_ch.add_series({
+            "name": "Gross Sales (USD)",
+            "categories": ["01_Executive_Summary", start_row + 1, 1, start_row + num_ch, 1],
+            "values": ["01_Executive_Summary", start_row + 1, 4, start_row + num_ch, 4],
+            "fill": {"color": "#3B82F6"}
+        })
+        chart_ch.add_series({
+            "name": "Contribution Profit (USD)",
+            "categories": ["01_Executive_Summary", start_row + 1, 1, start_row + num_ch, 1],
+            "values": ["01_Executive_Summary", start_row + 1, 9, start_row + num_ch, 9],
+            "fill": {"color": "#10B981"}
+        })
+        chart_ch.set_title({"name": "Gross Sales vs. Net Contribution by Channel"})
+        chart_ch.set_size({"width": 660, "height": 320})
+        ws_exec.insert_chart(br_tot_row + 2, 1, chart_ch)
+        ws_exec.set_column("B:M", 19)
+
+        # TAB 2: 02_BCG_Menu_Matrix
         ws_sku = wb.add_worksheet("02_BCG_Menu_Matrix")
         ws_sku.hide_gridlines(2)
+        ws_sku.freeze_panes(5, 0)
         ws_sku.write("B2", "MENU ENGINEERING MATRIX (VOLUME VS. CONTRIBUTION MARGIN)", title_fmt)
         for col_idx, col_name in enumerate(sku_matrix.columns):
             ws_sku.write(4, 1 + col_idx, col_name.replace("_", " "), header_fmt)
@@ -909,21 +1072,41 @@ def build_excel_in_memory(
                 alert_red_fmt if "UNDERPERFORMER" in row.Classification else alert_warn_fmt
             )
             ws_sku.write(r_idx, 13, row.Classification, style)
+
+        ws_sku.autofilter(4, 1, 4 + len(sku_matrix), 13)
         ws_sku.set_column("B:N", 22)
 
-        daily_recon.to_excel(writer, sheet_name="03_Daily_Payout_Recon", index=False, startrow=3, startcol=1)
-        ws_recon = writer.sheets["03_Daily_Payout_Recon"]
+        # TAB 3: 03_Daily_Payout_Recon
+        ws_recon = wb.add_worksheet("03_Daily_Payout_Recon")
         ws_recon.hide_gridlines(2)
-        ws_recon.write("B2", "DAILY EXPECTED NET PAYOUT SCHEDULE", title_fmt)
-        for col_idx, col_name in enumerate(daily_recon.columns):
+        ws_recon.freeze_panes(4, 0)
+        ws_recon.write("B2", "DAILY EXPECTED NET PAYOUT SCHEDULE (NET OF FEES)", title_fmt)
+
+        recon_cols = list(daily_recon.columns)
+        for col_idx, col_name in enumerate(recon_cols):
             ws_recon.write(3, 1 + col_idx, col_name.replace("_", " "), header_fmt)
+
+        for r_idx, (_, r_series) in enumerate(daily_recon.iterrows(), start=4):
+            ws_recon.write(r_idx, 1, str(r_series["Clean_Date"]), text_fmt)
+            for c_idx, col_name in enumerate(recon_cols[1:], start=2):
+                ws_recon.write(r_idx, c_idx, float(r_series[col_name]), usd_fmt)
+
+        recon_tot_row = 4 + len(daily_recon)
+        ws_recon.write(recon_tot_row, 1, "TOTAL EXPECTED PAYOUT", total_text_fmt)
+        for c_idx, col_name in enumerate(recon_cols[1:], start=2):
+            ws_recon.write(recon_tot_row, c_idx, float(daily_recon[col_name].sum()), total_usd_fmt)
+
         ws_recon.set_column("B:I", 22)
 
+        # TAB 4: 04_Clean_Master_Ledger
         df.to_excel(writer, sheet_name="04_Clean_Master_Ledger", index=False)
         ws_raw = writer.sheets["04_Clean_Master_Ledger"]
+        ws_raw.freeze_panes(1, 0)
+        ws_raw.autofilter(0, 0, len(df), len(df.columns) - 1)
         ws_raw.set_column("A:S", 18)
 
     return output.getvalue()
+
 
 # ==============================================================================
 # MULTILINGUAL CFO EXECUTIVE MEMO GENERATOR
@@ -1061,6 +1244,7 @@ def build_cfo_memo_content(
     )
     return html_card, wa_text
 
+
 # ==============================================================================
 # MASTER ADMIN CLIENT PROVISIONING CONSOLE
 # ==============================================================================
@@ -1163,7 +1347,7 @@ def render_admin_console():
             has_cogs = "Pre-Loaded" if load_client_cogs_df(u) is not None else "Standard"
             rows.append({
                 "Username": u,
-                "Tier": "Public Sandbox (Paywalled)" if u == "demo" else "Paid License (Unlocked)",
+                "Tier": "Public Sandbox (Paywalled)" if u in ("demo", "dubai_demo") else "Paid License (Unlocked)",
                 "Password": p.get("password", ""),
                 "Company": p.get("company_name", ""),
                 "Saved COGS": has_cogs
@@ -1172,7 +1356,7 @@ def render_admin_console():
 
         selected_client = st.selectbox("Select Account to Generate Onboarding Link or Preview", list(clients_db.keys()))
         sel_p = clients_db[selected_client]
-        magic_client_url = f"https://exec-pos-audit.streamlit.app/?client={selected_client}&key={urllib.parse.quote(str(sel_p['password']))}"
+        magic_client_url = f"{APP_BASE_URL}/?client={selected_client}&key={urllib.parse.quote(str(sel_p['password']))}"
 
         onboarding_text = (
             f"*{sel_p['company_name']} — Executive POS & EBITDA Portal Access*\n\n"
@@ -1186,14 +1370,14 @@ def render_admin_console():
         b_act1, b_act2, b_act3 = st.columns(3)
         with b_act1:
             if st.button("Preview Account", use_container_width=True):
-                st.session_state.client_profile = sel_p
+                st.session_state.client_profile = dict(sel_p)
                 st.session_state.username = selected_client
                 st.rerun()
         with b_act2:
             wa_onboard_url = f"https://wa.me/?text={urllib.parse.quote(onboarding_text)}"
             st.link_button("Send Login via WhatsApp", url=wa_onboard_url, use_container_width=True)
         with b_act3:
-            if selected_client != "demo":
+            if selected_client not in ("demo", "dubai_demo"):
                 if st.button("Delete Account", use_container_width=True):
                     delete_client_from_store(selected_client)
                     st.rerun()
@@ -1202,6 +1386,7 @@ def render_admin_console():
             st.caption("Copy and paste this block into Streamlit Cloud -> Settings -> Secrets so all paid accounts persist permanently.")
             st.code(format_secrets_toml(clients_db), language="toml")
 
+
 # ==============================================================================
 # MAIN AUTHENTICATED WORKSPACE
 # ==============================================================================
@@ -1209,8 +1394,9 @@ def main_portal():
     profile = st.session_state.client_profile
     company_name = profile["company_name"]
     is_admin = st.session_state.get("is_admin", False)
-    is_demo_account = (st.session_state.username == "demo") and (not is_admin)
+    is_demo_account = (st.session_state.username in ("demo", "dubai_demo")) and (not is_admin)
     owner_wa = get_owner_whatsapp()
+    default_market = profile.get("market", "Beirut")
 
     with st.sidebar:
         st.markdown(f"<div style='font-size:1.05rem; font-weight:700; color:#F8FAFC; margin-bottom:2px;'>{company_name}</div>", unsafe_allow_html=True)
@@ -1223,8 +1409,25 @@ def main_portal():
 
         role = st.selectbox("Workspace Mode", role_options)
 
+        active_market = st.selectbox(
+            "Regional Market Preset",
+            ["Beirut", "Dubai"],
+            index=1 if default_market == "Dubai" else 0,
+            format_func=lambda m: "🇱🇧 Beirut (LBP / USD)" if m == "Beirut" else "🇦🇪 Dubai (AED / USD)"
+        )
+
         with st.expander("1. FX & Channel Fees", expanded=True):
-            lbp_rate = st.number_input("LBP / USD Exchange Rate", min_value=1000.0, max_value=500000.0, value=float(profile.get("default_lbp_rate", 89500.0)), step=500.0)
+            if active_market == "Dubai":
+                default_fx_val = float(profile.get("default_lbp_rate", 3.6725))
+                if default_fx_val > 100:
+                    default_fx_val = 3.6725
+                lbp_rate = st.number_input("AED / USD Exchange Rate", min_value=1.0, max_value=10.0, value=default_fx_val, step=0.0025, format="%.4f")
+            else:
+                default_fx_val = float(profile.get("default_lbp_rate", 89500.0))
+                if default_fx_val < 100:
+                    default_fx_val = 89500.0
+                lbp_rate = st.number_input("LBP / USD Exchange Rate", min_value=1000.0, max_value=500000.0, value=default_fx_val, step=500.0)
+
             delivery_fee = st.slider("Aggregator Commission (%)", 0.0, 40.0, float(profile.get("delivery_fee_pct", 25.0)), 0.5) / 100.0
             packaging_cost_usd = st.number_input("Delivery Packaging / Unit ($)", min_value=0.0, max_value=5.0, value=float(profile.get("packaging_cost_usd", 0.65)), step=0.05)
             card_fee = st.slider("Card POS Fee (%)", 0.0, 10.0, float(profile.get("card_fee_pct", 2.0)), 0.1) / 100.0
@@ -1332,7 +1535,7 @@ def main_portal():
                 col_cashier = st.selectbox("Cashier / Operator", opt_pos_cols, index=guess_column_index(pos_cols, ["cashier", "user", "server", "waiter", "caissier", "emp"], allow_none=True))
             with m4:
                 col_sku = st.selectbox("SKU / Article Code", opt_pos_cols, index=guess_column_index(pos_cols, ["sku", "code", "barcode", "ref", "item_id"], allow_none=True))
-                col_curr = st.selectbox("Currency (LBP / USD)", opt_pos_cols, index=guess_column_index(pos_cols, ["curr", "devise", "currency"], allow_none=True))
+                col_curr = st.selectbox("Currency (LBP / AED / USD)", opt_pos_cols, index=guess_column_index(pos_cols, ["curr", "devise", "currency"], allow_none=True))
                 col_inline_cost = st.selectbox("Unit Cost (If in POS File)", opt_pos_cols, index=guess_column_index(pos_cols, ["cout", "cost", "cogs", "achat"], allow_none=True))
 
         std_pos = pd.DataFrame()
@@ -1378,7 +1581,7 @@ def main_portal():
         elif preloaded_client_cogs is not None:
             std_cogs = preloaded_client_cogs
     else:
-        sample_pos, sample_cogs = generate_sample_datasets(lbp_rate)
+        sample_pos, sample_cogs = generate_sample_datasets(lbp_rate, active_market)
         std_pos = sample_pos.rename(columns={"Item_Sold": "Item_Name"})
         std_cogs = preloaded_client_cogs if preloaded_client_cogs is not None else sample_cogs
 
@@ -1437,14 +1640,17 @@ def main_portal():
         with col_u:
             counted_usd = st.number_input("Physical USD Bills Counted ($)", min_value=0.0, value=float(round(expected_cash * 0.70, 2)), step=10.0)
         with col_l:
-            counted_lbp = st.number_input("Physical LBP Bills Counted (LBP)", min_value=0.0, value=float(round(expected_cash * 0.30 * lbp_rate, -3)), step=100000.0)
+            local_label = "Physical AED Bills Counted (AED)" if active_market == "Dubai" else "Physical LBP Bills Counted (LBP)"
+            local_step = 50.0 if active_market == "Dubai" else 100000.0
+            local_default = float(round(expected_cash * 0.30 * lbp_rate, 2 if active_market == "Dubai" else -3))
+            counted_lbp = st.number_input(local_label, min_value=0.0, value=local_default, step=local_step)
 
         total_counted_usd = counted_usd + (counted_lbp / lbp_rate)
         variance_usd = total_counted_usd - expected_cash
         if abs(variance_usd) < 1.0:
             st.success(f"Drawer Balanced — Total Counted: ${total_counted_usd:,.2f} (Variance: ${variance_usd:+.2f})")
         elif variance_usd < 0:
-            st.error(f"Cash Shortage Detected — Drawer is short by ${abs(variance_usd):,.2f} ({abs(variance_usd)*lbp_rate:,.0f} LBP)")
+            st.error(f"Cash Shortage Detected — Drawer is short by ${abs(variance_usd):,.2f}")
         else:
             st.warning(f"Cash Overage — Drawer is over by +${variance_usd:,.2f} (Verify unrecorded POS tickets)")
         return
@@ -1459,7 +1665,8 @@ def main_portal():
 
     bar_left, bar_right = st.columns([3, 1.2], vertical_alignment="center")
     with bar_left:
-        st.caption(f"Normalized ledger across {active_days} active day(s) at {lbp_rate:,.0f} LBP/USD.")
+        fx_cap = f"{lbp_rate:,.4f} AED/USD" if active_market == "Dubai" else f"{lbp_rate:,.0f} LBP/USD"
+        st.caption(f"Normalized ledger across {active_days} active day(s) at {fx_cap}.")
     with bar_right:
         if demo_paywall_active:
             wa_unlock_xlsx = urllib.parse.quote(
@@ -1633,7 +1840,10 @@ def main_portal():
         with col_c1:
             counted_usd = st.number_input("Counted USD Notes ($)", min_value=0.0, value=float(round(expected_cash * 0.70, 2)), step=10.0)
         with col_c2:
-            counted_lbp = st.number_input("Counted LBP Notes (LBP)", min_value=0.0, value=float(round(expected_cash * 0.30 * lbp_rate, -3)), step=100000.0)
+            local_notes_label = "Counted AED Notes (AED)" if active_market == "Dubai" else "Counted LBP Notes (LBP)"
+            local_notes_step = 50.0 if active_market == "Dubai" else 100000.0
+            local_notes_val = float(round(expected_cash * 0.30 * lbp_rate, 2 if active_market == "Dubai" else -3))
+            counted_lbp = st.number_input(local_notes_label, min_value=0.0, value=local_notes_val, step=local_notes_step)
         with col_c3:
             total_counted = counted_usd + (counted_lbp / lbp_rate)
             variance = total_counted - expected_cash
@@ -1653,9 +1863,8 @@ def main_portal():
         if demo_paywall_active:
             cashier_audit["Cashier_Server"] = [f"[REDACTED OPERATOR #{i+1}]" for i in range(len(cashier_audit))]
 
-        cashier_audit["Discount_Rate_Pct"] = (
-            cashier_audit["Total_Discounts_USD"] / (cashier_audit["Gross_Sales_USD"] + cashier_audit["Total_Discounts_USD"])
-        ) * 100.0
+        denom = (cashier_audit["Gross_Sales_USD"] + cashier_audit["Total_Discounts_USD"]).replace(0, 1.0)
+        cashier_audit["Discount_Rate_Pct"] = (cashier_audit["Total_Discounts_USD"] / denom) * 100.0
         cashier_audit["Control_Status"] = cashier_audit["Discount_Rate_Pct"].apply(
             lambda r: "AUDIT REQUIRED (>5%)" if r >= 5.0 else ("ELEVATED (2–5%)" if r >= 2.0 else "WITHIN POLICY")
         )
@@ -1688,6 +1897,7 @@ def main_portal():
 
         wa_summary_url = f"https://wa.me/?text={urllib.parse.quote(memo_wa_text)}"
         st.link_button("Forward Executive Memo via WhatsApp", url=wa_summary_url, type="primary")
+
 
 if not st.session_state.authenticated:
     login_screen()
