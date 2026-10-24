@@ -40,7 +40,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-APP_BASE_URL = "https://pos-margin-app-5dqt2eh8rz5vkti89awhnn.streamlit.app"
+APP_BASE_URL = "https://exec-pos-audit.streamlit.app"
 CLIENTS_JSON_PATH = "clients_store.json"
 COGS_STORAGE_DIR = "client_cogs_store"
 os.makedirs(COGS_STORAGE_DIR, exist_ok=True)
@@ -953,12 +953,127 @@ def classify_channel_and_fee(raw_channel: str, delivery_fee: float, card_fee: fl
 
 
 # ==============================================================================
-# SAMPLE DATA GENERATOR
+# BRAND- & CONCEPT-AWARE SAMPLE DATA GENERATOR
 # ==============================================================================
-@st.cache_data
-def generate_sample_datasets(lbp_rate: float, market: str = "Beirut"):
+def resolve_brand_demo_profile(company_name: str, market: str = "Beirut") -> tuple[list[dict], list[str]]:
+    """Returns realistic menu SKUs (with Star, Plowhorse & Promo Bleeder economics) and branches tailored to the restaurant."""
+    c = (company_name or "").lower()
+
+    if "roadster" in c:
+        cogs = [
+            {"SKU": "RD-101", "Item_Name": "Mighty Chicken Burger", "Category": "Burgers", "Unit_Cost_USD": 3.80, "Menu_Price_USD": 12.50},
+            {"SKU": "RD-102", "Item_Name": "Swiss Truffle Mushroom Burger", "Category": "Burgers", "Unit_Cost_USD": 5.40, "Menu_Price_USD": 11.20},
+            {"SKU": "RD-103", "Item_Name": "Crispy Chicken Strips Basket", "Category": "Starters", "Unit_Cost_USD": 2.30, "Menu_Price_USD": 9.80},
+            {"SKU": "RD-104", "Item_Name": "Mozzarella Sticks & Wedges", "Category": "Sides", "Unit_Cost_USD": 1.35, "Menu_Price_USD": 6.20},
+            {"SKU": "RD-105", "Item_Name": "Toters Diner Meal Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 8.90, "Menu_Price_USD": 13.00},
+            {"SKU": "RD-106", "Item_Name": "Classic Oreo Milkshake", "Category": "Beverages", "Unit_Cost_USD": 1.25, "Menu_Price_USD": 5.50},
+        ]
+        return cogs, ["Ashrafieh Sassine", "Downtown Beirut", "ABC Verdun", "Jal El Dib Highway"]
+
+    if "zaatar" in c:
+        cogs = [
+            {"SKU": "ZWZ-101", "Item_Name": "Famous Chicken Wrap", "Category": "Wraps", "Unit_Cost_USD": 2.40, "Menu_Price_USD": 8.20},
+            {"SKU": "ZWZ-102", "Item_Name": "Mighty Kafta & Cheese Wrap", "Category": "Wraps", "Unit_Cost_USD": 3.90, "Menu_Price_USD": 7.50},
+            {"SKU": "ZWZ-103", "Item_Name": "Halloumi & Bacon Baked Wrap", "Category": "Bakery", "Unit_Cost_USD": 1.65, "Menu_Price_USD": 6.80},
+            {"SKU": "ZWZ-104", "Item_Name": "Spiced Potato Wedges & Dip", "Category": "Sides", "Unit_Cost_USD": 0.90, "Menu_Price_USD": 4.40},
+            {"SKU": "ZWZ-105", "Item_Name": "Toters Wrap & Wedges Duo (Promo)", "Category": "Promos", "Unit_Cost_USD": 6.80, "Menu_Price_USD": 9.80},
+            {"SKU": "ZWZ-106", "Item_Name": "Fresh Mint Iced Lemonade", "Category": "Beverages", "Unit_Cost_USD": 0.75, "Menu_Price_USD": 3.80},
+        ]
+        return cogs, ["Mar Mikhael", "Dbayeh Highway", "Hamra Bliss", "Kaslik"]
+
+    if "swiss butter" in c:
+        cogs = [
+            {"SKU": "SB-101", "Item_Name": "Beef Filet & Swiss Butter Sauce", "Category": "Mains", "Unit_Cost_USD": 5.80, "Menu_Price_USD": 16.50},
+            {"SKU": "SB-102", "Item_Name": "Ribeye Steak Platter (250g)", "Category": "Mains", "Unit_Cost_USD": 8.40, "Menu_Price_USD": 16.50},
+            {"SKU": "SB-103", "Item_Name": "Chicken Breast & Herb Sauce", "Category": "Mains", "Unit_Cost_USD": 3.40, "Menu_Price_USD": 14.00},
+            {"SKU": "SB-104", "Item_Name": "Warm Baguette & Mesclun Salad", "Category": "Sides", "Unit_Cost_USD": 0.95, "Menu_Price_USD": 4.50},
+            {"SKU": "SB-105", "Item_Name": "Toters Steak & Fondant Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 12.20, "Menu_Price_USD": 17.80},
+            {"SKU": "SB-106", "Item_Name": "Molten Chocolate Fondant", "Category": "Desserts", "Unit_Cost_USD": 1.50, "Menu_Price_USD": 6.50},
+        ]
+        return cogs, ["Gemmayzeh Gouraud", "Jal El Dib Highway", "Zalka"]
+
+    if any(k in c for k in ["malak", "tawouk", "deek duke", "abdallah", "barbar", "mano"]):
+        cogs = [
+            {"SKU": "TWK-101", "Item_Name": "Signature Garlic Tawouk Sandwich", "Category": "Sandwiches", "Unit_Cost_USD": 2.10, "Menu_Price_USD": 7.20},
+            {"SKU": "TWK-102", "Item_Name": "Charcoal Grilled Half Chicken Meal", "Category": "Platters", "Unit_Cost_USD": 5.20, "Menu_Price_USD": 10.20},
+            {"SKU": "TWK-103", "Item_Name": "Crispy Chicken Burger Platter", "Category": "Burgers", "Unit_Cost_USD": 2.60, "Menu_Price_USD": 9.80},
+            {"SKU": "TWK-104", "Item_Name": "Coleslaw, Garlic Paste & Fries Box", "Category": "Sides", "Unit_Cost_USD": 0.95, "Menu_Price_USD": 4.50},
+            {"SKU": "TWK-105", "Item_Name": "Toters 2-Sandwich Combo Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 7.90, "Menu_Price_USD": 11.50},
+            {"SKU": "TWK-106", "Item_Name": "Fresh Laban Ayran & Soft Drink", "Category": "Beverages", "Unit_Cost_USD": 0.65, "Menu_Price_USD": 3.00},
+        ]
+        return cogs, ["Hamra Main", "Ashrafieh", "Dbayeh Highway", "Verdun"]
+
+    if any(k in c for k in ["kababji", "enab", "batchig", "liza", "babel", "sultan", "em sherif", "allobeirut", "allo beirut", "zaroob", "falafel"]):
+        cogs = [
+            {"SKU": "LEV-101", "Item_Name": "Mixed Mashawi Grill Platter", "Category": "Grills", "Unit_Cost_USD": 6.40, "Menu_Price_USD": 19.50},
+            {"SKU": "LEV-102", "Item_Name": "Shish Taouk & Kafta in Ouzi Bread", "Category": "Sandwiches", "Unit_Cost_USD": 4.90, "Menu_Price_USD": 9.80},
+            {"SKU": "LEV-103", "Item_Name": "Hummus Bel Lahmeh & Pine Nuts", "Category": "Hot Mezzeh", "Unit_Cost_USD": 2.50, "Menu_Price_USD": 10.50},
+            {"SKU": "LEV-104", "Item_Name": "Fattoush & Batata Harra Duo", "Category": "Cold Mezzeh", "Unit_Cost_USD": 1.35, "Menu_Price_USD": 6.50},
+            {"SKU": "LEV-105", "Item_Name": "Aggregator Family Grill Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 13.20, "Menu_Price_USD": 19.00},
+            {"SKU": "LEV-106", "Item_Name": "Fresh Mulberry Jallab Carafe", "Category": "Beverages", "Unit_Cost_USD": 0.95, "Menu_Price_USD": 4.50},
+        ]
+        branches = ["Hessa Street", "City Walk", "JBR Walk"] if market == "Dubai" else ["Downtown Beirut", "Ashrafieh", "Dbayeh", "Hamra"]
+        return cogs, branches
+
+    if any(k in c for k in ["bartartine", "paul", "lina", "wooden", "moulin", "home bakery"]):
+        cogs = [
+            {"SKU": "BAK-101", "Item_Name": "Club Sandwich on Country Sourdough", "Category": "Sandwiches", "Unit_Cost_USD": 3.40, "Menu_Price_USD": 11.50},
+            {"SKU": "BAK-102", "Item_Name": "Roast Beef & Brie Tartine", "Category": "Tartines", "Unit_Cost_USD": 5.30, "Menu_Price_USD": 10.80},
+            {"SKU": "BAK-103", "Item_Name": "Quinoa, Kale & Goat Cheese Salad", "Category": "Salads", "Unit_Cost_USD": 2.30, "Menu_Price_USD": 10.50},
+            {"SKU": "BAK-104", "Item_Name": "Artisanal Almond Croissant Duo", "Category": "Viennoiserie", "Unit_Cost_USD": 1.20, "Menu_Price_USD": 5.80},
+            {"SKU": "BAK-105", "Item_Name": "Toters Breakfast & Coffee Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 8.60, "Menu_Price_USD": 12.50},
+            {"SKU": "BAK-106", "Item_Name": "Specialty Oat Milk Flat White", "Category": "Coffee", "Unit_Cost_USD": 1.10, "Menu_Price_USD": 4.80},
+        ]
+        branches = ["Galleria Mall", "Dubai Mall", "DIFC"] if market == "Dubai" else ["Ashrafieh", "Downtown Beirut", "ABC Dbayeh", "ABC Verdun"]
+        return cogs, branches
+
+    if any(k in c for k in ["sushi", "kobe", "3fils"]):
+        cogs = [
+            {"SKU": "JPN-101", "Item_Name": "Crispy Crazy Salmon Roll (8 pcs)", "Category": "Maki Rolls", "Unit_Cost_USD": 4.10, "Menu_Price_USD": 13.50},
+            {"SKU": "JPN-102", "Item_Name": "Miso Glazed Black Cod", "Category": "Mains", "Unit_Cost_USD": 10.80, "Menu_Price_USD": 21.50},
+            {"SKU": "JPN-103", "Item_Name": "Spicy Tuna & Kani Sashimi Salad", "Category": "Salads", "Unit_Cost_USD": 3.10, "Menu_Price_USD": 13.00},
+            {"SKU": "JPN-104", "Item_Name": "Rock Shrimp Tempura & Edamame", "Category": "Starters", "Unit_Cost_USD": 2.20, "Menu_Price_USD": 9.50},
+            {"SKU": "JPN-105", "Item_Name": "Toters 24-Pc Sushi Boat (Promo)", "Category": "Promos", "Unit_Cost_USD": 17.80, "Menu_Price_USD": 25.50},
+            {"SKU": "JPN-106", "Item_Name": "Iced Yuzu Matcha Refresher", "Category": "Beverages", "Unit_Cost_USD": 1.30, "Menu_Price_USD": 5.80},
+        ]
+        return cogs, ["Sodeco Ashrafieh", "Downtown Beirut", "Dbayeh"]
+
+    if any(k in c for k in ["appetito", "tavolina", "pinza", "italian"]):
+        cogs = [
+            {"SKU": "ITA-101", "Item_Name": "Burrata & Truffle Wood-Fired Pizza", "Category": "Pizza", "Unit_Cost_USD": 4.20, "Menu_Price_USD": 14.50},
+            {"SKU": "ITA-102", "Item_Name": "Tagliatelle Bolognese Ragu", "Category": "Pasta", "Unit_Cost_USD": 5.60, "Menu_Price_USD": 11.20},
+            {"SKU": "ITA-103", "Item_Name": "Penne Arrabbiata & Parmigiano", "Category": "Pasta", "Unit_Cost_USD": 2.20, "Menu_Price_USD": 10.50},
+            {"SKU": "ITA-104", "Item_Name": "Truffle Arancini & Bruschetta", "Category": "Antipasti", "Unit_Cost_USD": 1.65, "Menu_Price_USD": 7.50},
+            {"SKU": "ITA-105", "Item_Name": "2-Pizza & Tiramisu Delivery Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 13.10, "Menu_Price_USD": 19.00},
+            {"SKU": "ITA-106", "Item_Name": "Homemade Tiramisu Classico", "Category": "Dolci", "Unit_Cost_USD": 1.45, "Menu_Price_USD": 6.50},
+        ]
+        return cogs, ["Gemmayzeh", "Mar Mikhael", "Hamra"]
+
+    if any(k in c for k in ["kalei", "sip", "urbanista", "ginette", "nightjar", "drop", "orto", "boston", "chaiwala"]):
+        cogs = [
+            {"SKU": "CAF-101", "Item_Name": "Sourdough Avocado & Poached Eggs", "Category": "Brunch", "Unit_Cost_USD": 2.90, "Menu_Price_USD": 10.50},
+            {"SKU": "CAF-102", "Item_Name": "Smoked Salmon & Labneh Bagel", "Category": "Brunch", "Unit_Cost_USD": 4.90, "Menu_Price_USD": 9.80},
+            {"SKU": "CAF-103", "Item_Name": "Single-Origin V60 Pour Over", "Category": "Specialty Coffee", "Unit_Cost_USD": 1.15, "Menu_Price_USD": 5.80},
+            {"SKU": "CAF-104", "Item_Name": "San Sebastian Burnt Cheesecake", "Category": "Bakery", "Unit_Cost_USD": 1.55, "Menu_Price_USD": 7.20},
+            {"SKU": "CAF-105", "Item_Name": "Coffee & Croissant Morning Duo (Promo)", "Category": "Promos", "Unit_Cost_USD": 6.10, "Menu_Price_USD": 8.90},
+            {"SKU": "CAF-106", "Item_Name": "Iced Spanish Matcha Latte", "Category": "Beverages", "Unit_Cost_USD": 1.30, "Menu_Price_USD": 6.00},
+        ]
+        branches = ["Alserkal Avenue", "Jumeirah", "DIFC"] if market == "Dubai" else ["Mar Mikhael", "Gemmayzeh", "Ras Beirut"]
+        return cogs, branches
+
+    if any(k in c for k in ["hallab", "douaihy", "noura", "smushkies", "brix"]):
+        cogs = [
+            {"SKU": "SWT-101", "Item_Name": "Knefe Bel Jebneh (Warm Plate)", "Category": "Oriental Sweets", "Unit_Cost_USD": 2.20, "Menu_Price_USD": 7.50},
+            {"SKU": "SWT-102", "Item_Name": "Halawet El Jibn (1 Kg Box)", "Category": "Takehome Boxes", "Unit_Cost_USD": 8.80, "Menu_Price_USD": 17.50},
+            {"SKU": "SWT-103", "Item_Name": "Assorted Pistachio Baklava Box", "Category": "Gift Boxes", "Unit_Cost_USD": 5.20, "Menu_Price_USD": 22.00},
+            {"SKU": "SWT-104", "Item_Name": "Maamoul Mad bil Ashta", "Category": "Pastries", "Unit_Cost_USD": 2.40, "Menu_Price_USD": 10.50},
+            {"SKU": "SWT-105", "Item_Name": "Toters Family Dessert Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 13.50, "Menu_Price_USD": 19.50},
+            {"SKU": "SWT-106", "Item_Name": "Rosewater Sahlab & Arabic Coffee", "Category": "Beverages", "Unit_Cost_USD": 0.90, "Menu_Price_USD": 4.50},
+        ]
+        return cogs, ["Dbayeh Highway", "Ashrafieh", "Downtown Riad El Solh"]
+
     if market == "Dubai":
-        cogs_data = [
+        cogs = [
             {"SKU": "SKU-101", "Item_Name": "Double Wagyu Smash Burger", "Category": "Mains", "Unit_Cost_USD": 4.40, "Menu_Price_USD": 13.50},
             {"SKU": "SKU-102", "Item_Name": "Nashville Hot Chicken Sliders", "Category": "Mains", "Unit_Cost_USD": 4.90, "Menu_Price_USD": 9.80},
             {"SKU": "SKU-103", "Item_Name": "Burrata & Heirloom Tomato Bowl", "Category": "Salads", "Unit_Cost_USD": 2.60, "Menu_Price_USD": 11.50},
@@ -966,18 +1081,25 @@ def generate_sample_datasets(lbp_rate: float, market: str = "Beirut"):
             {"SKU": "SKU-105", "Item_Name": "2-For-1 Aggregator Meal Box (Promo)", "Category": "Promos", "Unit_Cost_USD": 9.10, "Menu_Price_USD": 13.50},
             {"SKU": "SKU-106", "Item_Name": "Spanish Saffron Iced Latte", "Category": "Beverages", "Unit_Cost_USD": 1.35, "Menu_Price_USD": 6.00},
         ]
-        branches = ["Downtown Dubai", "JLT Cluster D", "Dubai Marina Walk"]
+        return cogs, ["Downtown Dubai", "JLT Cluster D", "Dubai Marina Walk"]
+
+    cogs = [
+        {"SKU": "SKU-101", "Item_Name": "Signature Truffle Burger", "Category": "Mains", "Unit_Cost_USD": 4.20, "Menu_Price_USD": 13.50},
+        {"SKU": "SKU-102", "Item_Name": "Crispy Chicken Sliders", "Category": "Mains", "Unit_Cost_USD": 4.80, "Menu_Price_USD": 9.50},
+        {"SKU": "SKU-103", "Item_Name": "Artisanal Kale & Quinoa Salad", "Category": "Salads", "Unit_Cost_USD": 2.40, "Menu_Price_USD": 11.00},
+        {"SKU": "SKU-104", "Item_Name": "Loaded Parmesan Fries", "Category": "Sides", "Unit_Cost_USD": 1.10, "Menu_Price_USD": 5.50},
+        {"SKU": "SKU-105", "Item_Name": "Combo Meal Box (Aggregator Promo)", "Category": "Promos", "Unit_Cost_USD": 8.90, "Menu_Price_USD": 13.00},
+        {"SKU": "SKU-106", "Item_Name": "Specialty Iced Matcha Latte", "Category": "Beverages", "Unit_Cost_USD": 1.30, "Menu_Price_USD": 5.50},
+    ]
+    return cogs, ["Ashrafieh Flagship", "Mar Mikhael Branch", "Dbayeh Highway"]
+
+
+@st.cache_data
+def generate_sample_datasets(lbp_rate: float, market: str = "Beirut", company_name: str = ""):
+    cogs_data, branches = resolve_brand_demo_profile(company_name, market)
+    if market == "Dubai":
         channels = ["In-Store Cash", "Apple Pay / Wallet", "Network Card POS", "Talabat Delivery", "Deliveroo / Careem"]
     else:
-        cogs_data = [
-            {"SKU": "SKU-101", "Item_Name": "Signature Truffle Burger", "Category": "Mains", "Unit_Cost_USD": 4.20, "Menu_Price_USD": 13.50},
-            {"SKU": "SKU-102", "Item_Name": "Crispy Chicken Sliders", "Category": "Mains", "Unit_Cost_USD": 4.80, "Menu_Price_USD": 9.50},
-            {"SKU": "SKU-103", "Item_Name": "Artisanal Kale & Quinoa Salad", "Category": "Salads", "Unit_Cost_USD": 2.40, "Menu_Price_USD": 11.00},
-            {"SKU": "SKU-104", "Item_Name": "Loaded Parmesan Fries", "Category": "Sides", "Unit_Cost_USD": 1.10, "Menu_Price_USD": 5.50},
-            {"SKU": "SKU-105", "Item_Name": "Combo Meal Box (Aggregator Promo)", "Category": "Promos", "Unit_Cost_USD": 8.90, "Menu_Price_USD": 13.00},
-            {"SKU": "SKU-106", "Item_Name": "Specialty Iced Matcha Latte", "Category": "Beverages", "Unit_Cost_USD": 1.30, "Menu_Price_USD": 5.50},
-        ]
-        branches = ["Ashrafieh Flagship", "Mar Mikhael Branch", "Dbayeh Highway"]
         channels = ["In-Store Cash", "Whish Money", "Bank Card POS", "Toters Delivery", "Talabat / Deliveroo"]
 
     cogs_df = pd.DataFrame(cogs_data)
@@ -2407,7 +2529,7 @@ def main_portal():
         elif preloaded_client_cogs is not None:
             std_cogs = preloaded_client_cogs
     else:
-        sample_pos, sample_cogs = generate_sample_datasets(lbp_rate, active_market)
+        sample_pos, sample_cogs = generate_sample_datasets(lbp_rate, active_market, company_name)
         std_pos = sample_pos.rename(columns={"Item_Sold": "Item_Name"})
         std_cogs = preloaded_client_cogs if preloaded_client_cogs is not None else sample_cogs
 
