@@ -1,0 +1,33 @@
+# ------------------------------------------------------------------
+# Secrets & credentials — NEVER commit these
+# ------------------------------------------------------------------
+.streamlit/secrets.toml
+secrets.toml
+.env
+.env.*
+*.pem
+*.key
+
+# Runtime client data written by the admin console
+clients_store.json
+client_cogs_store/
+
+# ------------------------------------------------------------------
+# Lead lists, outreach drafts & any customer data (PII / financials)
+# ------------------------------------------------------------------
+*.csv
+*.xlsx
+*.xls
+gmail_launchpad.html
+create_gmail_drafts.py
+get_leads.py
+
+# ------------------------------------------------------------------
+# Python / OS artifacts
+# ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+Thumbs.db
