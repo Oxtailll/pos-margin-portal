@@ -876,6 +876,455 @@ def build_bcg_menu_matrix(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ==============================================================================
+# ENTERPRISE ENGINE #1: AGGREGATOR CLAWBACK & OVERCHARGE FORENSIC MATCHER
+# ==============================================================================
+def generate_sample_aggregator_statement(cleaned_df: pd.DataFrame, contracted_fee: float) -> pd.DataFrame:
+    """Generates a realistic weekly aggregator payout statement with intentional clawbacks & fee overcharges."""
+    deliv_df = cleaned_df[cleaned_df["Is_Delivery"]].copy().reset_index(drop=True)
+    if deliv_df.empty:
+        return pd.DataFrame(columns=[
+            "Order_ID", "Statement_Date", "Aggregator_Gross_USD",
+            "Aggregator_Commission_USD", "Unverified_Refund_Clawback_USD",
+            "Promo_CoPay_Deduction_USD", "Aggregator_Net_Paid_USD", "Aggregator_Note"
+        ])
+
+    rng = random.Random(101)
+    stmt_rows = []
+    for idx, row in deliv_df.iterrows():
+        order_id = str(row["Order_ID"])
+        gross = float(row["Gross_Sales_USD"])
+        expected_fee = round(gross * float(contracted_fee), 2)
+        roll = rng.random()
+
+        # ~4% of orders are completely omitted from the weekly settlement ("Ghost Orders")
+        if roll < 0.04:
+            continue
+
+        actual_fee = expected_fee
+        refund_clawback = 0.0
+        promo_deduction = 0.0
+        note = "Standard Settlement"
+
+        if 0.04 <= roll < 0.10:
+            # Commission tier overcharge (charged 29-31% instead of contracted rate)
+            over_rate = float(contracted_fee) + rng.choice([0.04, 0.05, 0.06])
+            actual_fee = round(gross * over_rate, 2)
+            note = f"Rate Applied: {over_rate*100:.1f}% (Tier Mismatch)"
+        elif 0.10 <= roll < 0.15:
+            # Unverified customer complaint / missing item 100% or 50% clawback
+            refund_clawback = round(gross * rng.choice([0.50, 1.00]), 2)
+            note = "Customer Dispute Clawback (No Photo Proof)"
+        elif 0.15 <= roll < 0.19:
+            # Co-funded promo where 100% of discount was charged to restaurant instead of 50/50
+            promo_deduction = round(gross * rng.choice([0.15, 0.20]), 2)
+            note = "Campaign Co-Pay Deduction (100% Charged)"
+
+        net_paid = round(max(0.0, gross - actual_fee - refund_clawback - promo_deduction), 2)
+        stmt_rows.append({
+            "Order_ID": order_id,
+            "Statement_Date": str(row["Clean_Date"]),
+            "Aggregator_Gross_USD": round(gross, 2),
+            "Aggregator_Commission_USD": actual_fee,
+            "Unverified_Refund_Clawback_USD": refund_clawback,
+            "Promo_CoPay_Deduction_USD": promo_deduction,
+            "Aggregator_Net_Paid_USD": net_paid,
+            "Aggregator_Note": note,
+        })
+
+    return pd.DataFrame(stmt_rows)
+
+
+def audit_aggregator_settlement(
+    cleaned_df: pd.DataFrame,
+    settlement_df: pd.DataFrame,
+    contracted_fee: float,
+    demo_paywall_active: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
+    """Cross-matches POS delivery orders against the aggregator settlement statement order-by-order."""
+    pos_deliv = cleaned_df[cleaned_df["Is_Delivery"]].copy()
+    if pos_deliv.empty:
+        empty_df = pd.DataFrame()
+        return empty_df, empty_df, empty_df, {
+            "pos_orders": 0, "expected_net": 0.0, "actual_paid": 0.0,
+            "total_recoverable": 0.0, "disputed_count": 0,
+            "ghost_usd": 0.0, "overcharge_usd": 0.0, "clawback_usd": 0.0, "promo_err_usd": 0.0
+        }
+
+    pos_deliv["Order_ID_Key"] = pos_deliv["Order_ID"].astype(str).str.strip().str.upper()
+    pos_grouped = pos_deliv.groupby("Order_ID_Key", as_index=False).agg(
+        Order_ID=("Order_ID", "first"),
+        Clean_Date=("Clean_Date", "first"),
+        Branch=("Branch", "first"),
+        Item_Name=("Item_Name", "first"),
+        POS_Gross_USD=("Gross_Sales_USD", "sum"),
+        POS_Expected_Fee_USD=("Platform_Fee_USD", "sum"),
+        POS_Expected_Net_USD=("Net_Revenue_USD", "sum"),
+    )
+
+    stmt = settlement_df.copy()
+    if not stmt.empty and "Order_ID" in stmt.columns:
+        stmt["Order_ID_Key"] = stmt["Order_ID"].astype(str).str.strip().str.upper()
+        for col in ["Aggregator_Gross_USD", "Aggregator_Commission_USD", "Unverified_Refund_Clawback_USD", "Promo_CoPay_Deduction_USD", "Aggregator_Net_Paid_USD"]:
+            if col in stmt.columns:
+                stmt[col] = clean_numeric_series(stmt[col], 0.0)
+            else:
+                stmt[col] = 0.0
+        stmt_grouped = stmt.groupby("Order_ID_Key", as_index=False).agg(
+            Aggregator_Gross_USD=("Aggregator_Gross_USD", "sum"),
+            Aggregator_Commission_USD=("Aggregator_Commission_USD", "sum"),
+            Unverified_Refund_Clawback_USD=("Unverified_Refund_Clawback_USD", "sum"),
+            Promo_CoPay_Deduction_USD=("Promo_CoPay_Deduction_USD", "sum"),
+            Aggregator_Net_Paid_USD=("Aggregator_Net_Paid_USD", "sum"),
+        )
+        merged = pd.merge(pos_grouped, stmt_grouped, on="Order_ID_Key", how="left")
+    else:
+        merged = pos_grouped.copy()
+        for col in ["Aggregator_Gross_USD", "Aggregator_Commission_USD", "Unverified_Refund_Clawback_USD", "Promo_CoPay_Deduction_USD", "Aggregator_Net_Paid_USD"]:
+            merged[col] = float("nan")
+
+    is_missing = merged["Aggregator_Net_Paid_USD"].isna()
+    for col in ["Aggregator_Gross_USD", "Aggregator_Commission_USD", "Unverified_Refund_Clawback_USD", "Promo_CoPay_Deduction_USD", "Aggregator_Net_Paid_USD"]:
+        merged[col] = merged[col].fillna(0.0).astype("float64")
+
+    merged["Fee_Overcharge_USD"] = (merged["Aggregator_Commission_USD"] - merged["POS_Expected_Fee_USD"]).clip(lower=0.0).round(2)
+    merged["Recoverable_Claim_USD"] = (merged["POS_Expected_Net_USD"] - merged["Aggregator_Net_Paid_USD"]).clip(lower=0.0).round(2)
+    merged["Effective_Fee_Pct"] = (
+        merged["Aggregator_Commission_USD"] / merged["POS_Gross_USD"].replace(0, 1.0) * 100.0
+    ).round(1)
+
+    violations = []
+    for idx, r in merged.iterrows():
+        if is_missing.iloc[idx]:
+            violations.append("GHOST ORDER — Missing from Payout")
+        elif r["Unverified_Refund_Clawback_USD"] > 0.05:
+            violations.append("UNVERIFIED CLAWBACK — Customer Refund Deducted")
+        elif r["Promo_CoPay_Deduction_USD"] > 0.05:
+            violations.append("PROMO SPLIT ERROR — 100% Discount Charged")
+        elif r["Fee_Overcharge_USD"] > 0.15:
+            violations.append(f"COMMISSION OVERCHARGE ({r['Effective_Fee_Pct']:.1f}% vs {contracted_fee*100:.1f}%)")
+        elif r["Recoverable_Claim_USD"] > 0.25:
+            violations.append("NET PAYOUT SHORTFALL")
+        else:
+            violations.append("SETTLED AS CONTRACTED")
+
+    merged["Audit_Finding"] = violations
+
+    if demo_paywall_active:
+        merged["Item_Name"] = [f"[REDACTED SKU — License Required]" for _ in range(len(merged))]
+
+    disputed_df = merged[merged["Audit_Finding"] != "SETTLED AS CONTRACTED"].copy().sort_values("Recoverable_Claim_USD", ascending=False)
+
+    type_summary = (
+        disputed_df.groupby("Audit_Finding", as_index=False)
+        .agg(
+            Disputed_Orders=("Order_ID", "count"),
+            POS_Expected_Net_USD=("POS_Expected_Net_USD", "sum"),
+            Aggregator_Net_Paid_USD=("Aggregator_Net_Paid_USD", "sum"),
+            Recoverable_Claim_USD=("Recoverable_Claim_USD", "sum"),
+        )
+        .sort_values("Recoverable_Claim_USD", ascending=False)
+    )
+
+    ghost_usd = float(merged.loc[merged["Audit_Finding"].str.startswith("GHOST"), "Recoverable_Claim_USD"].sum())
+    clawback_usd = float(merged["Unverified_Refund_Clawback_USD"].sum())
+    overcharge_usd = float(merged["Fee_Overcharge_USD"].sum())
+    promo_err_usd = float(merged["Promo_CoPay_Deduction_USD"].sum())
+
+    stats = {
+        "pos_orders": int(len(merged)),
+        "expected_net": float(merged["POS_Expected_Net_USD"].sum()),
+        "actual_paid": float(merged["Aggregator_Net_Paid_USD"].sum()),
+        "total_recoverable": float(disputed_df["Recoverable_Claim_USD"].sum()),
+        "disputed_count": int(len(disputed_df)),
+        "ghost_usd": ghost_usd,
+        "overcharge_usd": overcharge_usd,
+        "clawback_usd": clawback_usd,
+        "promo_err_usd": promo_err_usd,
+    }
+    return merged, disputed_df, type_summary, stats
+
+
+def build_dispute_claim_excel(
+    disputed_df: pd.DataFrame,
+    type_summary: pd.DataFrame,
+    company_name: str,
+    contracted_fee: float,
+    stats: dict
+) -> bytes:
+    """Builds a formal 2-Tab Aggregator Dispute Claim Excel Packet ready to email to Toters/Talabat finance."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter", engine_kwargs={"options": {"in_memory": True}}) as writer:
+        wb = writer.book
+        title_fmt = wb.add_format({"bold": True, "font_size": 14, "font_color": "#0F172A"})
+        sub_fmt = wb.add_format({"italic": True, "font_size": 10, "font_color": "#475569"})
+        hdr_fmt = wb.add_format({"bold": True, "bg_color": "#991B1B", "font_color": "#FFFFFF", "border": 1, "align": "center"})
+        usd_fmt = wb.add_format({"num_format": "$#,##0.00", "border": 1})
+        int_fmt = wb.add_format({"num_format": "#,##0", "border": 1})
+        txt_fmt = wb.add_format({"border": 1})
+        tot_txt = wb.add_format({"bold": True, "bg_color": "#FEE2E2", "font_color": "#991B1B", "border": 1})
+        tot_usd = wb.add_format({"bold": True, "bg_color": "#FEE2E2", "font_color": "#991B1B", "num_format": "$#,##0.00", "border": 1})
+
+        ws1 = wb.add_worksheet("01_Official_Dispute_Claim")
+        ws1.hide_gridlines(2)
+        ws1.write("B2", f"OFFICIAL AGGREGATOR SETTLEMENT DISPUTE CLAIM — {company_name.upper()}", title_fmt)
+        ws1.write("B3", f"Contracted Commission Rate: {contracted_fee*100:.1f}% | Disputed Orders: {stats['disputed_count']} | Total Claim Amount: ${stats['total_recoverable']:,.2f} USD", sub_fmt)
+
+        cols_s = ["Discrepancy / Violation Category", "Affected Orders", "POS Expected Net (USD)", "Aggregator Settled (USD)", "Net Claim Owed (USD)"]
+        for idx, c in enumerate(cols_s):
+            ws1.write(5, 1 + idx, c, hdr_fmt)
+
+        for r_i, r in enumerate(type_summary.itertuples(index=False), start=6):
+            ws1.write(r_i, 1, r.Audit_Finding, txt_fmt)
+            ws1.write(r_i, 2, int(r.Disputed_Orders), int_fmt)
+            ws1.write(r_i, 3, float(r.POS_Expected_Net_USD), usd_fmt)
+            ws1.write(r_i, 4, float(r.Aggregator_Net_Paid_USD), usd_fmt)
+            ws1.write(r_i, 5, float(r.Recoverable_Claim_USD), usd_fmt)
+
+        t_row = 6 + len(type_summary)
+        ws1.write(t_row, 1, "TOTAL CREDIT MEMO / REIMBURSEMENT CLAIMED", tot_txt)
+        ws1.write(t_row, 2, int(stats["disputed_count"]), tot_txt)
+        ws1.write(t_row, 3, float(disputed_df["POS_Expected_Net_USD"].sum()) if not disputed_df.empty else 0.0, tot_usd)
+        ws1.write(t_row, 4, float(disputed_df["Aggregator_Net_Paid_USD"].sum()) if not disputed_df.empty else 0.0, tot_usd)
+        ws1.write(t_row, 5, float(stats["total_recoverable"]), tot_usd)
+        ws1.set_column("B:B", 44)
+        ws1.set_column("C:F", 24)
+
+        ws2 = wb.add_worksheet("02_Order_Level_Evidence")
+        ws2.freeze_panes(1, 0)
+        ev_cols = [
+            ("Order_ID", "Order ID", txt_fmt),
+            ("Clean_Date", "Order Date", txt_fmt),
+            ("Branch", "Branch", txt_fmt),
+            ("Item_Name", "Primary Item", txt_fmt),
+            ("POS_Gross_USD", "POS Gross ($)", usd_fmt),
+            ("POS_Expected_Fee_USD", "Contracted Fee ($)", usd_fmt),
+            ("Aggregator_Commission_USD", "Charged Fee ($)", usd_fmt),
+            ("Unverified_Refund_Clawback_USD", "Refund Clawback ($)", usd_fmt),
+            ("Promo_CoPay_Deduction_USD", "Promo Overcharge ($)", usd_fmt),
+            ("POS_Expected_Net_USD", "Expected Net ($)", usd_fmt),
+            ("Aggregator_Net_Paid_USD", "Actual Paid ($)", usd_fmt),
+            ("Recoverable_Claim_USD", "Claim Variance ($)", tot_usd),
+            ("Audit_Finding", "Violation Reason", txt_fmt),
+        ]
+        for c_i, (_, title, _) in enumerate(ev_cols):
+            ws2.write(0, c_i, title, hdr_fmt)
+
+        for r_i, (_, row_s) in enumerate(disputed_df.iterrows(), start=1):
+            for c_i, (col_key, _, cell_fmt) in enumerate(ev_cols):
+                val = row_s[col_key]
+                ws2.write(r_i, c_i, float(val) if cell_fmt in (usd_fmt, tot_usd) else str(val), cell_fmt)
+
+        if not disputed_df.empty:
+            ws2.autofilter(0, 0, len(disputed_df), len(ev_cols) - 1)
+        ws2.set_column(0, len(ev_cols) - 1, 20)
+
+    return output.getvalue()
+
+
+# ==============================================================================
+# ENTERPRISE ENGINE #3: REGISTER FORENSICS (CASH-ONLY DISCOUNT BIAS & FRAUD)
+# ==============================================================================
+def build_register_forensics(
+    cleaned_df: pd.DataFrame,
+    demo_paywall_active: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """Detects post-payment cash pocketing via Cash- vs. Card-Discount Bias & peer benchmarking."""
+    in_store_df = cleaned_df[~cleaned_df["Is_Delivery"]].copy()
+    if in_store_df.empty:
+        in_store_df = cleaned_df.copy()
+
+    in_store_df["Is_Cash_Ticket"] = in_store_df["Channel"] == "In-Store Cash"
+    in_store_df["Pre_Discount_Gross_USD"] = in_store_df["Gross_Sales_USD"] + in_store_df["Discount_USD"]
+    in_store_df["Ticket_Discount_Pct"] = (
+        in_store_df["Discount_USD"] / in_store_df["Pre_Discount_Gross_USD"].replace(0, 1.0) * 100.0
+    ).round(1)
+    in_store_df["Is_Bev_Or_Side"] = in_store_df["Category"].astype(str).str.lower().str.contains("bev|drink|side|coffee|latte")
+
+    records = []
+    for (branch, operator), grp in in_store_df.groupby(["Branch", "Cashier_Server"]):
+        if str(operator) == "System_Aggregator":
+            continue
+        cash_grp = grp[grp["Is_Cash_Ticket"]]
+        noncash_grp = grp[~grp["Is_Cash_Ticket"]]
+
+        cash_orders = len(cash_grp)
+        noncash_orders = len(noncash_grp)
+        total_orders = len(grp)
+
+        cash_disc_orders = int((cash_grp["Discount_USD"] > 0).sum())
+        noncash_disc_orders = int((noncash_grp["Discount_USD"] > 0).sum())
+
+        cash_disc_usd = float(cash_grp["Discount_USD"].sum())
+        noncash_disc_usd = float(noncash_grp["Discount_USD"].sum())
+        total_disc_usd = cash_disc_usd + noncash_disc_usd
+
+        cash_pre_gross = float(cash_grp["Pre_Discount_Gross_USD"].sum())
+        noncash_pre_gross = float(noncash_grp["Pre_Discount_Gross_USD"].sum())
+        total_pre_gross = cash_pre_gross + noncash_pre_gross
+
+        cash_disc_rate_pct = (cash_disc_usd / cash_pre_gross * 100.0) if cash_pre_gross > 0 else 0.0
+        noncash_disc_rate_pct = (noncash_disc_usd / noncash_pre_gross * 100.0) if noncash_pre_gross > 0 else 0.0
+        overall_disc_rate_pct = (total_disc_usd / total_pre_gross * 100.0) if total_pre_gross > 0 else 0.0
+
+        cash_ticket_freq_pct = (cash_disc_orders / cash_orders * 100.0) if cash_orders > 0 else 0.0
+        noncash_ticket_freq_pct = (noncash_disc_orders / noncash_orders * 100.0) if noncash_orders > 0 else 0.0
+
+        # Cash-Only Discount Bias Multiplier (compares Cash Discount % against Card/Wallet Discount %)
+        baseline_noncash = max(noncash_disc_rate_pct, 0.6)
+        cash_bias_ratio = round(cash_disc_rate_pct / baseline_noncash, 1) if cash_disc_rate_pct > 0 else 0.0
+
+        bev_attach_pct = (grp["Is_Bev_Or_Side"].sum() / total_orders * 100.0) if total_orders > 0 else 0.0
+
+        # Forensic Risk Score (0 - 100)
+        score = min(100.0, (
+            min(45.0, cash_disc_rate_pct * 5.0)
+            + min(35.0, max(0.0, cash_bias_ratio - 1.5) * 6.0)
+            + min(20.0, cash_ticket_freq_pct * 0.9)
+        ))
+        score = round(score, 0)
+
+        if score >= 65 or (cash_bias_ratio >= 3.5 and cash_disc_rate_pct >= 4.0):
+            verdict = "CRITICAL: CASH-POCKETING SIGNATURE"
+        elif score >= 40 or overall_disc_rate_pct >= 4.0:
+            verdict = "HIGH RISK: EXCESSIVE COMPING"
+        elif score >= 22:
+            verdict = "ELEVATED: MONITOR SHIFT"
+        else:
+            verdict = "CLEARED: WITHIN PEER NORM"
+
+        records.append({
+            "Branch": branch,
+            "Cashier_Server": operator,
+            "Total_Orders": total_orders,
+            "Cash_Orders": cash_orders,
+            "Cash_Disc_Tickets": cash_disc_orders,
+            "Cash_Discounts_USD": round(cash_disc_usd, 2),
+            "Cash_Disc_Rate_Pct": round(cash_disc_rate_pct, 1),
+            "Card_Wallet_Disc_Rate_Pct": round(noncash_disc_rate_pct, 1),
+            "Cash_Bias_Ratio": cash_bias_ratio,
+            "Bev_Side_Attach_Pct": round(bev_attach_pct, 1),
+            "Forensic_Risk_Score": score,
+            "Forensic_Verdict": verdict,
+        })
+
+    forensic_df = pd.DataFrame(records).sort_values("Forensic_Risk_Score", ascending=False).reset_index(drop=True)
+
+    suspicious_tickets = in_store_df[
+        in_store_df["Is_Cash_Ticket"] & (in_store_df["Ticket_Discount_Pct"] >= 15.0)
+    ][
+        [
+            "Order_ID", "Clean_Date", "Branch", "Cashier_Server", "Item_Name",
+            "Pre_Discount_Gross_USD", "Discount_USD", "Gross_Sales_USD", "Ticket_Discount_Pct"
+        ]
+    ].copy().sort_values("Discount_USD", ascending=False)
+
+    if demo_paywall_active:
+        forensic_df["Cashier_Server"] = [f"[REDACTED OPERATOR #{i+1}]" for i in range(len(forensic_df))]
+        suspicious_tickets["Cashier_Server"] = "[REDACTED OPERATOR]"
+        suspicious_tickets["Item_Name"] = "[REDACTED MENU ITEM]"
+
+    critical_ops = int((forensic_df["Forensic_Verdict"].str.startswith("CRITICAL")).sum()) if not forensic_df.empty else 0
+    suspected_cash_leak_usd = float(suspicious_tickets["Discount_USD"].sum()) if not suspicious_tickets.empty else 0.0
+
+    f_stats = {
+        "critical_operators": critical_ops,
+        "suspicious_cash_tickets": int(len(suspicious_tickets)),
+        "suspected_cash_pocketed_usd": suspected_cash_leak_usd,
+        "max_bias_ratio": float(forensic_df["Cash_Bias_Ratio"].max()) if not forensic_df.empty else 0.0,
+    }
+    return forensic_df, suspicious_tickets, f_stats
+
+
+# ==============================================================================
+# ENTERPRISE ENGINE #6: 1-CLICK BULK REPRICING PATCH GENERATOR
+# ==============================================================================
+def round_psychological_price(price_val: float, rule: str) -> float:
+    if price_val <= 0:
+        return 0.0
+    if rule == "Nearest $0.50 (.00 / .50)":
+        return round(price_val * 2.0) / 2.0
+    if rule == "Psychological .90 Ending":
+        base = float(int(price_val))
+        cand = base + 0.90
+        return cand if cand >= price_val else base + 1.90
+    return round(price_val * 4.0) / 4.0
+
+
+def build_bulk_repricing_schedule(
+    sku_matrix: pd.DataFrame,
+    delivery_fee: float,
+    packaging_cost_usd: float,
+    target_delivery_margin_pct: float,
+    elasticity_dropoff_pct: float,
+    rounding_rule: str,
+    lbp_rate: float,
+    active_market: str,
+    active_days: int
+) -> pd.DataFrame:
+    """Computes an executable POS & Aggregator price patch for all SKUs to hit target delivery margin."""
+    rows = []
+    target_m = float(target_delivery_margin_pct) / 100.0
+    denom = max(0.12, 1.0 - float(delivery_fee) - target_m)
+    local_curr = "AED" if active_market == "Dubai" else "LBP"
+
+    for r in sku_matrix.itertuples(index=False):
+        units = float(r.Units_Sold)
+        cur_price = float(r.Avg_Unit_Price_USD)
+        unit_cogs = float(r.Total_COGS_USD) / max(units, 1.0)
+        cur_margin_pct = float(r.Margin_Pct)
+
+        # Delivery break-even + target margin formula:
+        # Price * (1 - delivery_fee) - unit_cogs - packaging_cost_usd = Price * target_m
+        raw_req_deliv_price = (unit_cogs + float(packaging_cost_usd)) / denom
+        if "STAR" in r.Classification and cur_margin_pct >= target_delivery_margin_pct:
+            new_deliv_price = cur_price
+            action_tag = "KEEP CURRENT PRICE (STAR)"
+        else:
+            cand_price = max(cur_price + 0.50, raw_req_deliv_price)
+            new_deliv_price = round_psychological_price(cand_price, rounding_rule)
+            action_tag = f"REPRICE (+${new_deliv_price - cur_price:.2f} USD)"
+
+        price_delta = round(new_deliv_price - cur_price, 2)
+        new_deliv_net_unit = (new_deliv_price * (1.0 - float(delivery_fee))) - unit_cogs - float(packaging_cost_usd)
+        new_deliv_margin_pct = (new_deliv_net_unit / new_deliv_price * 100.0) if new_deliv_price > 0 else 0.0
+
+        monthly_units = units * (30.0 / max(active_days, 1))
+        adj_monthly_units = monthly_units * (1.0 - float(elasticity_dropoff_pct)) if price_delta > 0 else monthly_units
+        cur_monthly_contrib = monthly_units * float(r.Unit_Contribution_USD)
+
+        # Assume ~45% of volume is on delivery apps where the repricing patch applies
+        deliv_share = 0.45
+        lifted_unit_contrib = float(r.Unit_Contribution_USD) + (price_delta * (1.0 - float(delivery_fee)) * deliv_share)
+        new_monthly_contrib = adj_monthly_units * lifted_unit_contrib
+        monthly_ebitda_lift = max(0.0, new_monthly_contrib - cur_monthly_contrib) if price_delta > 0 else 0.0
+
+        if active_market == "Dubai":
+            fx = lbp_rate if lbp_rate < 100 else 3.6725
+            local_price = round(new_deliv_price * fx * 2.0) / 2.0
+        else:
+            fx = lbp_rate if lbp_rate >= 100 else 89500.0
+            local_price = round(new_deliv_price * fx, -4)
+
+        rows.append({
+            "SKU": r.SKU,
+            "Item_Name": r.Item_Name,
+            "Category": r.Category,
+            "BCG_Class": r.Classification,
+            "Unit_COGS_USD": round(unit_cogs, 2),
+            "Current_Price_USD": round(cur_price, 2),
+            "New_Delivery_Price_USD": round(new_deliv_price, 2),
+            "Price_Adjustment_USD": price_delta,
+            f"New_Delivery_Price_{local_curr}": local_price,
+            "Current_Margin_Pct": round(cur_margin_pct, 1),
+            "New_Delivery_Margin_Pct": round(new_deliv_margin_pct, 1),
+            "Est_Monthly_EBITDA_Lift_USD": round(monthly_ebitda_lift, 2),
+            "Patch_Action": action_tag,
+        })
+
+    return pd.DataFrame(rows).sort_values("Est_Monthly_EBITDA_Lift_USD", ascending=False)
+
+
+# ==============================================================================
 # EXCEL WORKBOOK GENERATOR (UPGRADED 4-TAB WITH CHARTS, TOTALS & AUTOFILTERS)
 # ==============================================================================
 def build_excel_in_memory(
@@ -1689,12 +2138,13 @@ def main_portal():
                 use_container_width=True
             )
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "Menu Engineering (BCG)",
-        "Price Elasticity Lab",
+        "Price Elasticity & Bulk Patch",
+        "Aggregator Clawback Audit",
         "EBITDA & Working Capital",
         "Cash Drawer Audit",
-        "Discount & Void Controls",
+        "Register Fraud Forensics",
         "Executive Memo"
     ])
 
@@ -1732,7 +2182,7 @@ def main_portal():
         )
 
     with tab2:
-        st.markdown("**Unit Price & Volume Elasticity Simulator**")
+        st.markdown("**1. Single-SKU Price & Volume Elasticity Simulator**")
         st.caption("Model the net monthly EBITDA impact of repricing an item while accounting for potential customer volume dropoff.")
 
         sim_col1, sim_col2, sim_col3 = st.columns(3)
@@ -1775,7 +2225,248 @@ def main_portal():
                 unsafe_allow_html=True
             )
 
+        st.markdown("---")
+        st.markdown("**2. Automated Portfolio Bulk Repricing & POS Patch Generator**")
+        st.caption(
+            "Automatically calculates the exact delivery menu price required for every SKU to absorb aggregator commissions "
+            "and packaging while hitting your target net margin—rounded to clean psychological price tiers and ready for 1-click POS / Aggregator import."
+        )
+
+        patch_c1, patch_c2, patch_c3 = st.columns([1.1, 1.1, 1.0])
+        with patch_c1:
+            target_deliv_margin = st.slider("Target Net Delivery Margin (%)", 15.0, 45.0, 28.0, 1.0)
+        with patch_c2:
+            rounding_rule = st.selectbox(
+                "Psychological Price Rounding Rule",
+                ["Nearest $0.50 (.00 / .50)", "Psychological .90 Ending", "Nearest $0.25 Increment"]
+            )
+        with patch_c3:
+            local_curr_code = "AED" if active_market == "Dubai" else "LBP"
+            repricing_df = build_bulk_repricing_schedule(
+                sku_matrix=display_matrix,
+                delivery_fee=delivery_fee,
+                packaging_cost_usd=packaging_cost_usd,
+                target_delivery_margin_pct=target_deliv_margin,
+                elasticity_dropoff_pct=volume_dropoff_pct,
+                rounding_rule=rounding_rule,
+                lbp_rate=lbp_rate,
+                active_market=active_market,
+                active_days=active_days
+            )
+            total_portfolio_lift = float(repricing_df["Est_Monthly_EBITDA_Lift_USD"].sum()) if not repricing_df.empty else 0.0
+            repriced_sku_count = int((repricing_df["Price_Adjustment_USD"] > 0).sum()) if not repricing_df.empty else 0
+            st.metric(
+                "Portfolio Monthly EBITDA Lift",
+                f"+${total_portfolio_lift:,.2f} / mo",
+                f"+${total_portfolio_lift * 12:,.0f} annualized ({repriced_sku_count} SKUs)"
+            )
+
+        local_col_name = f"New_Delivery_Price_{local_curr_code}"
+        st.dataframe(
+            repricing_df,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "SKU": st.column_config.TextColumn("SKU", width="small"),
+                "Item_Name": st.column_config.TextColumn("Menu Item", width="medium"),
+                "Category": st.column_config.TextColumn("Category", width="small"),
+                "BCG_Class": st.column_config.TextColumn("BCG Class", width="medium"),
+                "Unit_COGS_USD": st.column_config.NumberColumn("Unit COGS", format="$%.2f"),
+                "Current_Price_USD": st.column_config.NumberColumn("Current Price", format="$%.2f"),
+                "New_Delivery_Price_USD": st.column_config.NumberColumn("New Delivery Price", format="$%.2f"),
+                "Price_Adjustment_USD": st.column_config.NumberColumn("Delta ($)", format="+$%.2f"),
+                local_col_name: st.column_config.NumberColumn(
+                    f"New Price ({local_curr_code})",
+                    format="%.2f AED" if local_curr_code == "AED" else "%d LBP"
+                ),
+                "Current_Margin_Pct": st.column_config.NumberColumn("Old Margin (%)", format="%.1f%%"),
+                "New_Delivery_Margin_Pct": st.column_config.ProgressColumn("New Deliv. Margin (%)", format="%.1f%%", min_value=0, max_value=60),
+                "Est_Monthly_EBITDA_Lift_USD": st.column_config.NumberColumn("Monthly EBITDA Lift", format="+$%.2f"),
+                "Patch_Action": st.column_config.TextColumn("Recommended Action", width="medium"),
+            }
+        )
+
+        patch_csv_bytes = repricing_df.to_csv(index=False).encode("utf-8-sig")
+        dl_p1, dl_p2 = st.columns([1.2, 1.8])
+        with dl_p1:
+            st.download_button(
+                label=f"⬇️ Download Bulk POS & Aggregator Price Patch (.csv)",
+                data=patch_csv_bytes,
+                file_name=f"{company_name.replace(' ', '_')}_POS_Aggregator_Price_Patch.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True
+            )
+        with dl_p2:
+            st.caption(
+                f"Formatted for direct bulk import into Foodics, Omega POS, Simphony, and Toters / Talabat / Deliveroo partner portals "
+                f"(includes USD and normalized {local_curr_code} pricing)."
+            )
+
     with tab3:
+        st.markdown("**Aggregator Payout & Clawback Forensic Matcher (POS vs. Weekly Settlement)**")
+        st.caption(
+            "Cross-examines every POS delivery ticket against your weekly Toters, Talabat, Deliveroo, or Careem payout statement "
+            "to isolate omitted 'Ghost Orders', commission tier overcharges, and unverified customer refund clawbacks."
+        )
+
+        stmt_mode = st.radio(
+            "Aggregator Settlement Statement Source",
+            ["Built-in Weekly Aggregator Statement (Demo Audit)", "Upload Custom Settlement Statement (.xlsx / .csv)"],
+            horizontal=True
+        )
+
+        settlement_df = None
+        if stmt_mode.startswith("Built-in"):
+            settlement_df = generate_sample_aggregator_statement(cleaned_df, delivery_fee)
+        else:
+            up_stmt = st.file_uploader(
+                "Upload Weekly Toters / Talabat / Deliveroo Payout Statement (.xlsx or .csv)",
+                type=["xlsx", "xls", "csv"],
+                key="agg_stmt_upload"
+            )
+            if up_stmt is not None:
+                raw_stmt = safe_read_file(up_stmt)
+                s_cols = list(raw_stmt.columns)
+                st.markdown("**Map Settlement Statement Columns**")
+                mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+                with mc1:
+                    c_oid = st.selectbox("Order ID Column", s_cols, index=guess_column_index(s_cols, ["order", "id", "ref", "ticket"]))
+                with mc2:
+                    c_gross = st.selectbox("Order Gross ($)", s_cols, index=guess_column_index(s_cols, ["gross", "amount", "sales", "subtotal"]))
+                with mc3:
+                    c_comm = st.selectbox("Commission Charged ($)", s_cols, index=guess_column_index(s_cols, ["comm", "fee", "charge"]))
+                with mc4:
+                    c_claw = st.selectbox("Refund / Clawback ($)", ["(None)"] + s_cols, index=guess_column_index(s_cols, ["refund", "clawback", "penalty", "dispute", "deduct"], allow_none=True))
+                with mc5:
+                    c_net = st.selectbox("Net Payout ($)", s_cols, index=guess_column_index(s_cols, ["net", "payout", "settled", "paid", "transfer"]))
+
+                settlement_df = pd.DataFrame({
+                    "Order_ID": raw_stmt[c_oid].astype(str),
+                    "Aggregator_Gross_USD": clean_numeric_series(raw_stmt[c_gross], 0.0),
+                    "Aggregator_Commission_USD": clean_numeric_series(raw_stmt[c_comm], 0.0),
+                    "Unverified_Refund_Clawback_USD": clean_numeric_series(raw_stmt[c_claw], 0.0) if c_claw != "(None)" else 0.0,
+                    "Promo_CoPay_Deduction_USD": 0.0,
+                    "Aggregator_Net_Paid_USD": clean_numeric_series(raw_stmt[c_net], 0.0),
+                })
+            else:
+                st.info("Upload your weekly aggregator payout file above, or switch to the Built-in Weekly Aggregator Statement to preview the forensic audit.")
+
+        if settlement_df is not None:
+            merged_recon, disputed_df, type_summary, agg_stats = audit_aggregator_settlement(
+                cleaned_df, settlement_df, delivery_fee, demo_paywall_active
+            )
+
+            ak1, ak2, ak3, ak4 = st.columns(4)
+            ak1.metric(
+                "POS Expected Net Payout",
+                f"${agg_stats['expected_net']:,.2f}",
+                f"{agg_stats['pos_orders']:,} Delivery Orders"
+            )
+            ak2.metric(
+                "Aggregator Settled Net",
+                f"${agg_stats['actual_paid']:,.2f}",
+                f"-${agg_stats['total_recoverable']:,.2f} Shortfall",
+                delta_color="inverse"
+            )
+            ak3.metric(
+                "Total Recoverable Claim",
+                f"${agg_stats['total_recoverable']:,.2f}",
+                f"{agg_stats['disputed_count']} Disputed Tickets"
+            )
+            ak4.metric(
+                "Ghost Orders + Clawbacks",
+                f"${agg_stats['ghost_usd'] + agg_stats['clawback_usd']:,.2f}",
+                f"Overcharges: ${agg_stats['overcharge_usd'] + agg_stats['promo_err_usd']:,.2f}"
+            )
+
+            if agg_stats["total_recoverable"] > 0:
+                monthly_clawback_proj = agg_stats["total_recoverable"] * (30.0 / max(active_days, 1))
+                st.markdown(
+                    f'<div class="exec-banner-warn"><strong>Recoverable Aggregator Leakage Detected:</strong> '
+                    f'Found <strong>{agg_stats["disputed_count"]} delivery orders</strong> where the aggregator payout deviated from your '
+                    f'contracted <strong>{delivery_fee*100:.1f}%</strong> commission rate—totaling <strong>${agg_stats["total_recoverable"]:,.2f} USD</strong> '
+                    f'in immediate credit claims (<strong>~${monthly_clawback_proj:,.2f}/month</strong> annualized run-rate).</div>',
+                    unsafe_allow_html=True
+                )
+
+                claim_excel_bytes = build_dispute_claim_excel(
+                    disputed_df=disputed_df,
+                    type_summary=type_summary,
+                    company_name=company_name,
+                    contracted_fee=delivery_fee,
+                    stats=agg_stats
+                )
+                dispute_msg = (
+                    f"*OFFICIAL SETTLEMENT DISPUTE CLAIM — {company_name.upper()}*\n\n"
+                    f"Our POS reconciliation audit flagged *{agg_stats['disputed_count']} orders* in the current settlement cycle "
+                    f"with a net payout shortfall of *${agg_stats['total_recoverable']:,.2f} USD* vs. our contracted {delivery_fee*100:.1f}% rate:\n"
+                    f"• *Omitted / Ghost Orders:* ${agg_stats['ghost_usd']:,.2f} USD\n"
+                    f"• *Unverified Refund Clawbacks:* ${agg_stats['clawback_usd']:,.2f} USD\n"
+                    f"• *Commission Tier & Promo Overcharges:* ${agg_stats['overcharge_usd'] + agg_stats['promo_err_usd']:,.2f} USD\n\n"
+                    f"Please find the Order-Level Evidence Workbook attached and issue a credit memo of *${agg_stats['total_recoverable']:,.2f} USD* on the next payout cycle."
+                )
+                dispute_wa_url = f"https://wa.me/?text={urllib.parse.quote(dispute_msg)}"
+
+                btn_c1, btn_c2 = st.columns(2)
+                with btn_c1:
+                    st.download_button(
+                        label="⬇️ Download Official Dispute Claim Packet (.xlsx)",
+                        data=claim_excel_bytes,
+                        file_name=f"{company_name.replace(' ', '_')}_Aggregator_Dispute_Claim.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary",
+                        use_container_width=True
+                    )
+                with btn_c2:
+                    st.link_button(
+                        "📤 Send Formal Dispute Notice via WhatsApp / Account Manager",
+                        url=dispute_wa_url,
+                        use_container_width=True
+                    )
+
+            st.markdown("**Discrepancy Breakdown by Violation Category**")
+            st.dataframe(
+                type_summary,
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Audit_Finding": st.column_config.TextColumn("Violation Category", width="large"),
+                    "Disputed_Orders": st.column_config.NumberColumn("Affected Orders", format="%d"),
+                    "POS_Expected_Net_USD": st.column_config.NumberColumn("POS Expected Net ($)", format="$%.2f"),
+                    "Aggregator_Net_Paid_USD": st.column_config.NumberColumn("Aggregator Paid ($)", format="$%.2f"),
+                    "Recoverable_Claim_USD": st.column_config.NumberColumn("Recoverable Claim ($)", format="$%.2f"),
+                }
+            )
+
+            st.markdown("**Order-Level Disputed Settlement Evidence Ledger**")
+            st.dataframe(
+                disputed_df[[
+                    "Order_ID", "Clean_Date", "Branch", "Item_Name", "POS_Gross_USD",
+                    "POS_Expected_Fee_USD", "Aggregator_Commission_USD", "Unverified_Refund_Clawback_USD",
+                    "Promo_CoPay_Deduction_USD", "POS_Expected_Net_USD", "Aggregator_Net_Paid_USD",
+                    "Recoverable_Claim_USD", "Audit_Finding"
+                ]],
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Order_ID": st.column_config.TextColumn("Order ID"),
+                    "Clean_Date": st.column_config.TextColumn("Date"),
+                    "Branch": st.column_config.TextColumn("Branch"),
+                    "Item_Name": st.column_config.TextColumn("Primary Item"),
+                    "POS_Gross_USD": st.column_config.NumberColumn("POS Gross", format="$%.2f"),
+                    "POS_Expected_Fee_USD": st.column_config.NumberColumn("Contracted Fee", format="$%.2f"),
+                    "Aggregator_Commission_USD": st.column_config.NumberColumn("Charged Fee", format="$%.2f"),
+                    "Unverified_Refund_Clawback_USD": st.column_config.NumberColumn("Refund Clawback", format="$%.2f"),
+                    "Promo_CoPay_Deduction_USD": st.column_config.NumberColumn("Promo Deduction", format="$%.2f"),
+                    "POS_Expected_Net_USD": st.column_config.NumberColumn("Expected Net", format="$%.2f"),
+                    "Aggregator_Net_Paid_USD": st.column_config.NumberColumn("Settled Net", format="$%.2f"),
+                    "Recoverable_Claim_USD": st.column_config.NumberColumn("Claim Owed ($)", format="$%.2f"),
+                    "Audit_Finding": st.column_config.TextColumn("Forensic Finding", width="medium"),
+                }
+            )
+
+    with tab4:
         col_p1, col_p2 = st.columns([1.3, 1])
         with col_p1:
             st.markdown(f"**Operating P&L Waterfall ({active_days} Active Days)**")
@@ -1829,7 +2520,7 @@ def main_portal():
                 }
             )
 
-    with tab4:
+    with tab5:
         st.markdown("**End-of-Shift Cash Drawer Reconciliation**")
         branches_list = ["All Branches"] + sorted(cleaned_df["Branch"].unique().tolist())
         sel_branch = st.selectbox("Select Branch to Reconcile", branches_list)
@@ -1850,41 +2541,89 @@ def main_portal():
             st.metric("Expected POS Cash", f"${expected_cash:,.2f}")
             st.metric("Total Physical Cash (USD Equiv.)", f"${total_counted:,.2f}", f"{variance:+.2f} USD Variance")
 
-    with tab5:
-        st.markdown("**Cashier Discount & Void Anomaly Audit**")
-        st.caption("Monitors discount frequency across operators and branches to identify unauthorized comps or register leakage.")
-
-        cashier_audit = cleaned_df.groupby(["Branch", "Cashier_Server"], as_index=False).agg(
-            Total_Orders=("Order_ID", "count"),
-            Gross_Sales_USD=("Gross_Sales_USD", "sum"),
-            Total_Discounts_USD=("Discount_USD", "sum"),
-            Discounted_Orders=("Discount_USD", lambda s: int((s > 0).sum()))
+    with tab6:
+        st.markdown("**Register Forensic Engine: 'Cash-Only Discount Bias' & Post-Payment Skimming Audit**")
+        st.caption(
+            "Detects the #1 hospitality register theft pattern: a customer pays full price in cash, and the operator subsequently applies "
+            "a 20%–50% staff/promo discount on the open cash ticket to pocket the cash difference while keeping the physical drawer balanced."
         )
-        if demo_paywall_active:
-            cashier_audit["Cashier_Server"] = [f"[REDACTED OPERATOR #{i+1}]" for i in range(len(cashier_audit))]
 
-        denom = (cashier_audit["Gross_Sales_USD"] + cashier_audit["Total_Discounts_USD"]).replace(0, 1.0)
-        cashier_audit["Discount_Rate_Pct"] = (cashier_audit["Total_Discounts_USD"] / denom) * 100.0
-        cashier_audit["Control_Status"] = cashier_audit["Discount_Rate_Pct"].apply(
-            lambda r: "AUDIT REQUIRED (>5%)" if r >= 5.0 else ("ELEVATED (2–5%)" if r >= 2.0 else "WITHIN POLICY")
+        forensic_df, suspicious_tickets, f_stats = build_register_forensics(cleaned_df, demo_paywall_active)
+
+        fk1, fk2, fk3, fk4 = st.columns(4)
+        fk1.metric(
+            "Critical Operators Flagged",
+            f"{f_stats['critical_operators']} Operator(s)",
+            "Cash-Pocketing Signature" if f_stats["critical_operators"] > 0 else "Within Peer Norm",
+            delta_color="inverse" if f_stats["critical_operators"] > 0 else "normal"
         )
+        fk2.metric(
+            "Suspected Cash Skimmed",
+            f"${f_stats['suspected_cash_pocketed_usd']:,.2f}",
+            f"Est. ${f_stats['suspected_cash_pocketed_usd'] * (30.0 / max(active_days, 1)):,.0f} / mo exposure",
+            delta_color="inverse"
+        )
+        fk3.metric(
+            "High-Risk Cash Discount Tickets",
+            f"{f_stats['suspicious_cash_tickets']} Tickets",
+            "In-Store Cash Discounts >= 15%"
+        )
+        fk4.metric(
+            "Peak Cash-vs-Card Bias",
+            f"{f_stats['max_bias_ratio']:.1f}x Multiplier",
+            "Cash Disc % vs. Card Disc %"
+        )
+
+        if f_stats["critical_operators"] > 0:
+            st.markdown(
+                f'<div class="exec-banner-warn"><strong>Forensic Alert — Asymmetric Cash Discounting Detected:</strong> '
+                f'<strong>{f_stats["critical_operators"]} operator/branch profile(s)</strong> exhibit a Cash-Ticket Discount Rate '
+                f'up to <strong>{f_stats["max_bias_ratio"]:.1f}x higher</strong> than their Card/Wallet discount rate across '
+                f'<strong>{f_stats["suspicious_cash_tickets"]} cash transactions</strong> (${f_stats["suspected_cash_pocketed_usd"]:,.2f} USD). '
+                f'Require manager PIN overrides on all post-print cash discounts immediately.</div>',
+                unsafe_allow_html=True
+            )
+
+        st.markdown("**Peer-Benchmarked Operator Forensic Matrix**")
         st.dataframe(
-            cashier_audit.sort_values("Total_Discounts_USD", ascending=False),
+            forensic_df,
             hide_index=True,
             use_container_width=True,
             column_config={
                 "Branch": st.column_config.TextColumn("Branch"),
                 "Cashier_Server": st.column_config.TextColumn("Operator"),
-                "Total_Orders": st.column_config.NumberColumn("Orders", format="%d"),
-                "Discounted_Orders": st.column_config.NumberColumn("Discounted Tickets", format="%d"),
-                "Gross_Sales_USD": st.column_config.NumberColumn("Net Sales (USD)", format="$%.2f"),
-                "Total_Discounts_USD": st.column_config.NumberColumn("Discounts Granted", format="$%.2f"),
-                "Discount_Rate_Pct": st.column_config.ProgressColumn("Discount Rate (%)", format="%.1f%%", min_value=0, max_value=25),
-                "Control_Status": st.column_config.TextColumn("Audit Status"),
+                "Total_Orders": st.column_config.NumberColumn("Total Orders", format="%d"),
+                "Cash_Orders": st.column_config.NumberColumn("Cash Orders", format="%d"),
+                "Cash_Disc_Tickets": st.column_config.NumberColumn("Discounted Cash Tickets", format="%d"),
+                "Cash_Discounts_USD": st.column_config.NumberColumn("Cash Discounts ($)", format="$%.2f"),
+                "Cash_Disc_Rate_Pct": st.column_config.NumberColumn("Cash Disc. Rate (%)", format="%.1f%%"),
+                "Card_Wallet_Disc_Rate_Pct": st.column_config.NumberColumn("Card/Wallet Disc. (%)", format="%.1f%%"),
+                "Cash_Bias_Ratio": st.column_config.NumberColumn("Cash Bias Ratio", format="%.1fx"),
+                "Bev_Side_Attach_Pct": st.column_config.NumberColumn("Bev/Side Attach (%)", format="%.1f%%"),
+                "Forensic_Risk_Score": st.column_config.ProgressColumn("Forensic Risk Score", format="%d / 100", min_value=0, max_value=100),
+                "Forensic_Verdict": st.column_config.TextColumn("Forensic Verdict", width="medium"),
             }
         )
 
-    with tab6:
+        st.markdown("**Flagged High-Risk In-Store Cash Discount Tickets (Audit Evidence)**")
+        st.dataframe(
+            suspicious_tickets,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Order_ID": st.column_config.TextColumn("Order ID"),
+                "Clean_Date": st.column_config.TextColumn("Date"),
+                "Branch": st.column_config.TextColumn("Branch"),
+                "Cashier_Server": st.column_config.TextColumn("Operator"),
+                "Item_Name": st.column_config.TextColumn("Menu Item"),
+                "Pre_Discount_Gross_USD": st.column_config.NumberColumn("Original Ticket ($)", format="$%.2f"),
+                "Discount_USD": st.column_config.NumberColumn("Cash Discount Applied ($)", format="$%.2f"),
+                "Gross_Sales_USD": st.column_config.NumberColumn("Net Cash Logged ($)", format="$%.2f"),
+                "Ticket_Discount_Pct": st.column_config.NumberColumn("Discount %", format="%.1f%%"),
+            }
+        )
+
+    with tab7:
         memo_lang = st.radio("Memo Language", ["English", "Français", "العربية"], horizontal=True)
         aggregator_hold_val = cleaned_df[cleaned_df["Channel"] == "Delivery Aggregators"]["Net_Revenue_USD"].sum()
 
