@@ -4,3 +4,25 @@ backgroundColor = "#090D16"
 secondaryBackgroundColor = "#111827"
 textColor = "#F8FAFC"
 primaryColor = "#3B82F6"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+# Reject uploads larger than 15 MB (default is 200 MB) to prevent memory-exhaustion / DoS
+maxUploadSize = 15
+# Cap websocket message size (MB) sent to the browser
+maxMessageSize = 100
+# Keep cross-site request forgery protection and CORS restrictions enabled
+enableXsrfProtection = true
+enableCORS = true
+
+[client]
+# Never show Python tracebacks / exception messages to visitors (prevents internal info leakage)
+showErrorDetails = "none"
+# Hide developer options (rerun, clear cache, settings) from public visitors
+toolbarMode = "viewer"
+
+[runner]
+# Do not render bare expressions ("magic") — avoids accidentally printing secrets or dataframes
+magicEnabled = false
