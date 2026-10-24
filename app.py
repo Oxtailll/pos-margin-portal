@@ -1,8 +1,15 @@
+import base64
+import hashlib
+import hmac
+import html
 import io
 import json
 import os
 import re
 import random
+import secrets
+import threading
+import time
 import urllib.parse
 from datetime import datetime, timedelta
 import pandas as pd
@@ -61,6 +68,213 @@ def get_admin_password() -> str | None:
 
 def get_owner_whatsapp() -> str:
     return re.sub(r"[^0-9]", "", get_secret("owner_whatsapp", ""))
+
+
+# ==============================================================================
+# SECURITY LAYER: HASHING, SIGNED LOGIN TOKENS, RATE LIMITING, SANITIZATION
+# ==============================================================================
+PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
+PBKDF2_ITERATIONS = 310_000
+MIN_PASSWORD_LENGTH = 10
+LOGIN_TOKEN_TTL_HOURS = 72
+MAX_FAILED_LOGINS = 5
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+MAX_UPLOAD_MB = 15
+MAX_UPLOAD_ROWS = 300_000
+SAFE_USERNAME_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
+SPREADSHEET_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+
+def esc(value) -> str:
+    """HTML-escapes any dynamic value before it is placed inside unsafe_allow_html markup (XSS defense)."""
+    return html.escape(str(value), quote=True)
+
+
+def clean_display_text(value, max_len: int = 80) -> str:
+    """Strips control characters and caps length for user-supplied display strings (e.g. ?company=)."""
+    return re.sub(r"[\x00-\x1f\x7f]", "", str(value)).strip()[:max_len]
+
+
+def safe_filename(value: str, fallback: str = "Client") -> str:
+    """Produces a download-safe filename stem (no path separators, quotes, or header-injection characters)."""
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", str(value)).strip("_")[:60]
+    return stem or fallback
+
+
+def safe_username(value) -> str | None:
+    """Returns a normalized username only if it matches the strict whitelist, else None."""
+    u = str(value or "").strip().lower()
+    return u if SAFE_USERNAME_RE.fullmatch(u) else None
+
+
+def hash_password(plain: str, salt: str | None = None, iterations: int = PBKDF2_ITERATIONS) -> str:
+    """Salted PBKDF2-HMAC-SHA256 hash, stored as 'pbkdf2_sha256$<iterations>$<salt>$<hex digest>'."""
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", str(plain).encode("utf-8"), salt.encode("utf-8"), iterations)
+    return f"{PASSWORD_HASH_PREFIX}${iterations}${salt}${digest.hex()}"
+
+
+def is_password_hashed(stored) -> bool:
+    return str(stored or "").startswith(PASSWORD_HASH_PREFIX + "$")
+
+
+def verify_password(plain: str, stored) -> bool:
+    """Constant-time password verification. Supports hashed values and legacy plaintext values."""
+    if plain is None or not stored:
+        return False
+    stored = str(stored)
+    if is_password_hashed(stored):
+        try:
+            _, iters, salt, expected_hex = stored.split("$", 3)
+            digest = hashlib.pbkdf2_hmac("sha256", str(plain).encode("utf-8"), salt.encode("utf-8"), int(iters))
+            return hmac.compare_digest(digest.hex(), expected_hex)
+        except Exception:
+            return False
+    # Legacy plaintext secret (still compared in constant time). Rotate to a hash via generate_secrets.py.
+    return hmac.compare_digest(str(plain).encode("utf-8"), stored.encode("utf-8"))
+
+
+def get_signing_key() -> bytes | None:
+    """HMAC key for signed login links. Must be set as `auth_signing_key` (32+ chars) in Streamlit Secrets."""
+    key = get_secret("auth_signing_key", "")
+    return key.encode("utf-8") if len(key) >= 32 else None
+
+
+def _b64url_encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def _token_signature(key: bytes, username: str, expiry: int, stored_password) -> str:
+    # Binding the stored password (hash) into the signature means rotating a client's password revokes old links.
+    msg = f"{username}|{expiry}|{stored_password}".encode("utf-8")
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()
+
+
+def make_login_token(username: str, stored_password, ttl_hours: int = LOGIN_TOKEN_TTL_HOURS) -> str | None:
+    """Creates a time-limited, HMAC-signed login token (no password ever appears in the URL)."""
+    key = get_signing_key()
+    clean_u = safe_username(username)
+    if key is None or clean_u is None:
+        return None
+    expiry = int(time.time()) + int(ttl_hours) * 3600
+    sig = _token_signature(key, clean_u, expiry, stored_password)
+    return _b64url_encode(f"{clean_u}|{expiry}|{sig}".encode("utf-8"))
+
+
+def verify_login_token(token: str, clients: dict) -> str | None:
+    """Returns the username if the token is authentic, unexpired, and matches the current password; else None."""
+    key = get_signing_key()
+    if key is None or not token or len(token) > 512:
+        return None
+    try:
+        username, expiry_s, sig = _b64url_decode(str(token)).decode("utf-8").rsplit("|", 2)
+        expiry = int(expiry_s)
+    except Exception:
+        return None
+    clean_u = safe_username(username)
+    if clean_u is None or clean_u not in clients or expiry < int(time.time()):
+        return None
+    expected = _token_signature(key, clean_u, expiry, clients[clean_u].get("password", ""))
+    return clean_u if hmac.compare_digest(expected, sig) else None
+
+
+@st.cache_resource
+def _login_attempt_registry() -> dict:
+    """Process-wide failed-login registry shared across all browser sessions (anti brute-force)."""
+    return {"lock": threading.Lock(), "attempts": {}}
+
+
+def get_client_ip() -> str:
+    try:
+        ip = getattr(st.context, "ip_address", None)
+        if ip:
+            return str(ip)
+        fwd = st.context.headers.get("X-Forwarded-For", "")
+        if fwd:
+            return fwd.split(",")[0].strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _attempt_keys(username: str) -> list[str]:
+    keys = [f"user:{(username or '').strip().lower()[:64]}"]
+    ip = get_client_ip()
+    if ip != "unknown":
+        keys.append(f"ip:{ip}")
+    return keys
+
+
+def login_lockout_remaining(username: str) -> int:
+    """Seconds remaining on a lockout for this username / IP / browser session (0 if not locked)."""
+    now = time.time()
+    remaining = 0.0
+    reg = _login_attempt_registry()
+    with reg["lock"]:
+        for k in _attempt_keys(username):
+            rec = reg["attempts"].get(k)
+            if rec and rec["locked_until"] > now:
+                remaining = max(remaining, rec["locked_until"] - now)
+    sess_until = st.session_state.get("login_locked_until", 0.0)
+    if sess_until > now:
+        remaining = max(remaining, sess_until - now)
+    return int(remaining)
+
+
+def register_failed_login(username: str):
+    now = time.time()
+    reg = _login_attempt_registry()
+    with reg["lock"]:
+        # Opportunistic cleanup so the registry cannot grow without bound
+        if len(reg["attempts"]) > 5000:
+            reg["attempts"] = {k: v for k, v in reg["attempts"].items() if v["locked_until"] > now or now - v["first"] < LOGIN_LOCKOUT_SECONDS}
+        for k in _attempt_keys(username):
+            rec = reg["attempts"].get(k)
+            if rec is None or now - rec["first"] > LOGIN_LOCKOUT_SECONDS:
+                rec = {"count": 0, "first": now, "locked_until": 0.0}
+            rec["count"] += 1
+            if rec["count"] >= MAX_FAILED_LOGINS:
+                rec["locked_until"] = now + LOGIN_LOCKOUT_SECONDS
+            reg["attempts"][k] = rec
+
+    st.session_state.failed_login_count = st.session_state.get("failed_login_count", 0) + 1
+    if st.session_state.failed_login_count >= MAX_FAILED_LOGINS:
+        st.session_state.login_locked_until = now + LOGIN_LOCKOUT_SECONDS
+        st.session_state.failed_login_count = 0
+
+
+def reset_failed_logins(username: str):
+    reg = _login_attempt_registry()
+    with reg["lock"]:
+        for k in _attempt_keys(username):
+            if k.startswith("user:"):
+                reg["attempts"].pop(k, None)
+    st.session_state.failed_login_count = 0
+    st.session_state.login_locked_until = 0.0
+
+
+def neutralize_formula(value):
+    """Prevents CSV / spreadsheet formula injection (CWE-1236) by prefixing risky leading characters."""
+    if isinstance(value, str) and value and value[0] in SPREADSHEET_FORMULA_TRIGGERS:
+        return "'" + value
+    return value
+
+
+def sanitize_df_for_export(df: pd.DataFrame) -> pd.DataFrame:
+    """Returns a copy of df where every text cell is neutralized against formula injection."""
+    out = df.copy()
+    for col in out.columns:
+        if not pd.api.types.is_numeric_dtype(out[col]) and not pd.api.types.is_bool_dtype(out[col]):
+            out[col] = out[col].map(neutralize_formula).astype("object")
+    return out
+
+
+# xlsxwriter options: never auto-convert strings beginning with '=' into live formulas or URLs into hyperlinks
+SAFE_XLSX_OPTIONS = {"in_memory": True, "strings_to_formulas": False, "strings_to_urls": False}
 
 
 # ==============================================================================
@@ -440,14 +654,28 @@ def delete_client_from_store(username: str):
             pass
 
 
+def _cogs_path(username: str) -> str | None:
+    """Builds the COGS storage path only for whitelisted usernames and refuses any path that escapes the store."""
+    clean_u = safe_username(username)
+    if clean_u is None:
+        return None
+    base_dir = os.path.realpath(COGS_STORAGE_DIR)
+    path = os.path.realpath(os.path.join(base_dir, f"cogs_{clean_u}.csv"))
+    if os.path.commonpath([base_dir, path]) != base_dir:
+        return None
+    return path
+
+
 def save_client_cogs_df(username: str, std_cogs_df: pd.DataFrame):
-    path = os.path.join(COGS_STORAGE_DIR, f"cogs_{username.strip().lower()}.csv")
+    path = _cogs_path(username)
+    if path is None:
+        return
     std_cogs_df.to_csv(path, index=False, encoding="utf-8")
 
 
 def load_client_cogs_df(username: str) -> pd.DataFrame | None:
-    path = os.path.join(COGS_STORAGE_DIR, f"cogs_{username.strip().lower()}.csv")
-    if os.path.exists(path):
+    path = _cogs_path(username)
+    if path is not None and os.path.exists(path):
         try:
             return pd.read_csv(path)
         except Exception:
@@ -455,17 +683,31 @@ def load_client_cogs_df(username: str) -> pd.DataFrame | None:
     return None
 
 
+def _toml_str(value) -> str:
+    """Safely quotes a value as a TOML basic string (escapes quotes, backslashes, and control chars)."""
+    return json.dumps(str(value), ensure_ascii=False)
+
+
 def format_secrets_toml(clients_dict: dict) -> str:
     lines = [
-        f'admin_username = "{get_admin_username()}"',
-        'admin_password = "KEEP_YOUR_SECRET_ADMIN_PASSWORD"',
-        f'owner_whatsapp = "{get_owner_whatsapp()}"',
+        f'admin_username = {_toml_str(get_admin_username())}',
+        'admin_password = "PASTE_HASH_FROM_generate_secrets.py"',
+        'auth_signing_key = "PASTE_RANDOM_KEY_FROM_generate_secrets.py"',
+        f'owner_whatsapp = {_toml_str(get_owner_whatsapp())}',
         ""
     ]
     for uname, p in clients_dict.items():
-        lines.append(f"[clients.{uname}]")
-        lines.append(f'password = "{p.get("password", "client123")}"')
-        lines.append(f'company_name = "{p.get("company_name", uname)}"')
+        clean_u = safe_username(uname)
+        if clean_u is None:
+            continue
+        stored_pw = p.get("password", "")
+        if stored_pw and not is_password_hashed(stored_pw):
+            stored_pw = hash_password(stored_pw)
+        lines.append(f"[clients.{clean_u}]")
+        lines.append(f'password = {_toml_str(stored_pw)}')
+        lines.append(f'company_name = {_toml_str(p.get("company_name", clean_u))}')
+        if p.get("market"):
+            lines.append(f'market = {_toml_str(p.get("market"))}')
         lines.append(f'default_lbp_rate = {float(p.get("default_lbp_rate", 89500.0))}')
         lines.append(f'delivery_fee_pct = {float(p.get("delivery_fee_pct", 25.0))}')
         lines.append(f'card_fee_pct = {float(p.get("card_fee_pct", 2.0))}')
@@ -475,14 +717,14 @@ def format_secrets_toml(clients_dict: dict) -> str:
         lines.append(f'monthly_rent_usd = {float(p.get("monthly_rent_usd", 1800.0))}')
         lines.append(f'monthly_payroll_usd = {float(p.get("monthly_payroll_usd", 2400.0))}')
         lines.append(f'monthly_generator_utilities_usd = {float(p.get("monthly_generator_utilities_usd", 750.0))}')
-        if uname == "demo":
-            lines.append(f'demo_upload_mode = "{p.get("demo_upload_mode", "teaser")}"')
+        if clean_u in ("demo", "dubai_demo"):
+            lines.append(f'demo_upload_mode = {_toml_str(p.get("demo_upload_mode", "teaser"))}')
         lines.append("")
     return "\n".join(lines)
 
 
 # ==============================================================================
-# ZERO-FRICTION URL AUTO-LOGIN (?demo=true or ?client=...) & SESSION STATE
+# ZERO-FRICTION URL AUTO-LOGIN (?demo=true or signed ?token=...) & SESSION STATE
 # ==============================================================================
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -494,9 +736,32 @@ query_params = st.query_params
 if not st.session_state.authenticated:
     demo_param = str(query_params.get("demo", "")).strip().lower()
     market_param = str(query_params.get("market", query_params.get("city", ""))).strip().title()
-    company_param = str(query_params.get("company", "")).strip()
+    company_param = clean_display_text(query_params.get("company", ""), max_len=80)
+    token_param = str(query_params.get("token", "")).strip()
 
-    if demo_param in ["1", "true", "yes"] or market_param in ["Beirut", "Dubai"] or company_param:
+    if token_param:
+        # Signed, expiring client login link (replaces the old insecure ?client=...&key=<password> scheme)
+        clients = get_client_db()
+        token_user = verify_login_token(token_param, clients)
+        if token_user and token_user not in ("demo", "dubai_demo"):
+            st.session_state.authenticated = True
+            st.session_state.username = token_user
+            st.session_state.client_profile = dict(clients[token_user])
+            st.session_state.is_admin = False
+        else:
+            st.session_state.login_notice = "This login link is invalid or has expired. Please sign in with your credentials."
+        try:
+            del st.query_params["token"]  # Strip the token from the address bar / Referer headers
+        except Exception:
+            pass
+    elif "key" in query_params:
+        # Legacy password-in-URL links are permanently disabled
+        st.session_state.login_notice = "Password-based login links have been retired for security. Please sign in below or request a new secure link."
+        try:
+            del st.query_params["key"]
+        except Exception:
+            pass
+    elif demo_param in ["1", "true", "yes"] or market_param in ["Beirut", "Dubai"] or company_param:
         clients = get_client_db()
         base_key = "dubai_demo" if market_param == "Dubai" else "demo"
         profile = dict(clients.get(base_key, clients["demo"]))
@@ -506,15 +771,6 @@ if not st.session_state.authenticated:
         st.session_state.username = "demo"
         st.session_state.client_profile = profile
         st.session_state.is_admin = False
-    elif "client" in query_params and "key" in query_params:
-        c_user = str(query_params.get("client", "")).strip().lower()
-        c_key = str(query_params.get("key", ""))
-        clients = get_client_db()
-        if c_user in clients and clients[c_user]["password"] == c_key:
-            st.session_state.authenticated = True
-            st.session_state.username = c_user
-            st.session_state.client_profile = dict(clients[c_user])
-            st.session_state.is_admin = False
 
 
 def login_screen():
@@ -528,6 +784,10 @@ def login_screen():
             <div class="suite-subtitle">Multi-currency normalization, aggregator fee auditing, menu engineering, and shift reconciliation.</div>
         </div>
         """, unsafe_allow_html=True)
+
+        login_notice = st.session_state.pop("login_notice", None)
+        if login_notice:
+            st.warning(login_notice)
 
         d_col1, d_col2 = st.columns(2)
         with d_col1:
@@ -554,15 +814,21 @@ def login_screen():
         )
 
         with st.form("login_form"):
-            username = st.text_input("Account Identifier", placeholder="Enter client username").strip().lower()
-            password = st.text_input("Password", type="password", placeholder="••••••••")
+            username = st.text_input("Account Identifier", placeholder="Enter client username", max_chars=64).strip().lower()
+            password = st.text_input("Password", type="password", placeholder="••••••••", max_chars=256)
             submit = st.form_submit_button("Sign In", use_container_width=True)
 
             if submit:
+                lock_remaining = login_lockout_remaining(username)
+                if lock_remaining > 0:
+                    st.error(f"Too many failed sign-in attempts. Please try again in {max(1, lock_remaining // 60)} minute(s).")
+                    st.stop()
+
                 admin_user = get_admin_username()
                 admin_pw = get_admin_password()
 
-                if username == admin_user and admin_pw is not None and password == admin_pw:
+                if username == admin_user and admin_pw is not None and verify_password(password, admin_pw):
+                    reset_failed_logins(username)
                     clients = get_client_db()
                     st.session_state.authenticated = True
                     st.session_state.username = admin_user
@@ -571,13 +837,19 @@ def login_screen():
                     st.rerun()
 
                 clients = get_client_db()
-                if username in clients and clients[username]["password"] == password:
+                clean_u = safe_username(username)
+                # Always run one hash verification (even for unknown users) so response time does not reveal valid usernames
+                stored_pw = clients[clean_u].get("password", "") if clean_u in clients else hash_password("__dummy__", salt="0" * 32)
+                if clean_u in clients and verify_password(password, stored_pw):
+                    reset_failed_logins(username)
                     st.session_state.authenticated = True
-                    st.session_state.username = username
-                    st.session_state.client_profile = dict(clients[username])
+                    st.session_state.username = clean_u
+                    st.session_state.client_profile = dict(clients[clean_u])
                     st.session_state.is_admin = False
                     st.rerun()
                 else:
+                    register_failed_login(username)
+                    time.sleep(1.0)  # Slows automated password guessing
                     st.error("Invalid credentials. Use the buttons above to launch the demo environment.")
 
 
@@ -588,20 +860,47 @@ def safe_read_file(uploaded_file) -> pd.DataFrame:
     filename = uploaded_file.name.lower()
     raw_bytes = uploaded_file.getvalue()
 
+    # Upload hardening: extension whitelist, size cap, file-signature check, and row cap (anti-DoS / anti-spoofing)
+    if not filename.endswith((".csv", ".xlsx", ".xls", ".txt")):
+        st.error("Unsupported file type. Please upload a .csv, .xlsx, or .xls export.")
+        st.stop()
+    if len(raw_bytes) > MAX_UPLOAD_MB * 1024 * 1024:
+        st.error(f"File exceeds the {MAX_UPLOAD_MB} MB security limit. Please export a shorter date range.")
+        st.stop()
+    if filename.endswith(".xlsx") and not raw_bytes.startswith(b"PK\x03\x04"):
+        st.error("This file is not a valid .xlsx workbook (file signature mismatch).")
+        st.stop()
+    if filename.endswith(".xls") and not raw_bytes.startswith(b"\xd0\xcf\x11\xe0") and not raw_bytes.startswith(b"PK\x03\x04"):
+        st.error("This file is not a valid .xls workbook (file signature mismatch).")
+        st.stop()
+
+    def _cap_rows(frame: pd.DataFrame) -> pd.DataFrame:
+        if len(frame) > MAX_UPLOAD_ROWS:
+            st.warning(f"File contains {len(frame):,} rows; only the first {MAX_UPLOAD_ROWS:,} rows were analyzed.")
+            return frame.head(MAX_UPLOAD_ROWS)
+        return frame
+
     if filename.endswith((".xlsx", ".xls")):
-        df = pd.read_excel(io.BytesIO(raw_bytes))
-        return df.dropna(how="all")
+        try:
+            df = pd.read_excel(io.BytesIO(raw_bytes))
+        except Exception:
+            st.error("The workbook could not be parsed. Please re-export it from your POS as .xlsx or .csv.")
+            st.stop()
+        return _cap_rows(df.dropna(how="all"))
 
     for encoding in ["utf-8-sig", "cp1256", "latin1", "utf-16"]:
         for sep in [",", ";", "\t"]:
             try:
-                df = pd.read_csv(io.BytesIO(raw_bytes), encoding=encoding, sep=sep)
+                df = pd.read_csv(io.BytesIO(raw_bytes), encoding=encoding, sep=sep, nrows=MAX_UPLOAD_ROWS + 1)
                 if len(df.columns) > 1:
-                    return df.dropna(how="all")
+                    return _cap_rows(df.dropna(how="all"))
             except Exception:
                 continue
-    uploaded_file.seek(0)
-    return pd.read_csv(uploaded_file)
+    try:
+        return _cap_rows(pd.read_csv(io.BytesIO(raw_bytes), nrows=MAX_UPLOAD_ROWS + 1))
+    except Exception:
+        st.error("The file could not be parsed. Please upload a standard comma- or semicolon-separated CSV export.")
+        st.stop()
 
 
 def guess_column_index(columns: list, keywords: list, allow_none: bool = False) -> int:
@@ -1053,7 +1352,7 @@ def build_dispute_claim_excel(
 ) -> bytes:
     """Builds a formal 2-Tab Aggregator Dispute Claim Excel Packet ready to email to Toters/Talabat finance."""
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter", engine_kwargs={"options": {"in_memory": True}}) as writer:
+    with pd.ExcelWriter(output, engine="xlsxwriter", engine_kwargs={"options": SAFE_XLSX_OPTIONS}) as writer:
         wb = writer.book
         title_fmt = wb.add_format({"bold": True, "font_size": 14, "font_color": "#0F172A"})
         sub_fmt = wb.add_format({"italic": True, "font_size": 10, "font_color": "#475569"})
@@ -1368,7 +1667,7 @@ def build_excel_in_memory(
     daily_recon["Total_Expected_Payout_USD"] = daily_recon.drop(columns=["Clean_Date"]).sum(axis=1)
 
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter", engine_kwargs={"options": {"in_memory": True}}) as writer:
+    with pd.ExcelWriter(output, engine="xlsxwriter", engine_kwargs={"options": SAFE_XLSX_OPTIONS}) as writer:
         wb = writer.book
         title_fmt = wb.add_format({"bold": True, "font_size": 14, "font_color": "#0F172A"})
         subtitle_fmt = wb.add_format({"italic": True, "font_size": 10, "font_color": "#475569"})
@@ -1577,11 +1876,17 @@ def build_cfo_memo_content(
     top_stars = ", ".join(sku_matrix[sku_matrix["Classification"].str.contains("STAR")]["Item_Name"].head(2).tolist()) or "Core Menu"
     est_monthly_recovery = (bleeders["Units_Sold"].sum() * 1.25 * (30.0 / active_days)) if not bleeders.empty else 0.0
 
+    # HTML-escaped copies for the rendered memo cards (plain versions are kept for the WhatsApp text)
+    co_h = esc(company_name)
+    co_up_h = esc(company_name.upper())
+    stars_h = esc(top_stars)
+    worst_h = esc(worst_items)
+
     if lang == "Français":
         html_card = f"""
         <div class="memo-card">
             <div class="memo-header">
-                <h3 class="memo-title">NOTE D'AUDIT EXÉCUTIF — {company_name.upper()}</h3>
+                <h3 class="memo-title">NOTE D'AUDIT EXÉCUTIF — {co_up_h}</h3>
                 <span class="memo-meta">PÉRIODE ANALYSÉE : {active_days} JOURS</span>
             </div>
             <div class="memo-grid">
@@ -1598,8 +1903,8 @@ def build_cfo_memo_content(
             </ul>
             <div class="memo-section-title">2. Plan d'Action Menu Engineering (Matrice BCG)</div>
             <ul class="memo-list">
-                <li><span class="memo-highlight">Protéger les Produits Leaders (Stars) :</span> <em>{top_stars}</em> génèrent la plus forte contribution unitaire. Maintenir les prix pleins sans remise promotionnelle.</li>
-                <li><span class="memo-highlight">Ajustement Tarifaire Ciblé :</span> <em>{worst_items}</em> présentent une marge insuffisante après commission. Une hausse de <span class="memo-code">+$1.25 USD</span> sur les applications de livraison générera <span class="memo-code">+${est_monthly_recovery:,.2f} USD / mois</span> d'EBITDA net additionnel.</li>
+                <li><span class="memo-highlight">Protéger les Produits Leaders (Stars) :</span> <em>{stars_h}</em> génèrent la plus forte contribution unitaire. Maintenir les prix pleins sans remise promotionnelle.</li>
+                <li><span class="memo-highlight">Ajustement Tarifaire Ciblé :</span> <em>{worst_h}</em> présentent une marge insuffisante après commission. Une hausse de <span class="memo-code">+$1.25 USD</span> sur les applications de livraison générera <span class="memo-code">+${est_monthly_recovery:,.2f} USD / mois</span> d'EBITDA net additionnel.</li>
             </ul>
         </div>
         """
@@ -1620,7 +1925,7 @@ def build_cfo_memo_content(
         html_card = f"""
         <div class="memo-card" dir="rtl" style="text-align:right;">
             <div class="memo-header">
-                <h3 class="memo-title">التقرير المالي التنفيذي وتدقيق الربحية — {company_name}</h3>
+                <h3 class="memo-title">التقرير المالي التنفيذي وتدقيق الربحية — {co_h}</h3>
                 <span class="memo-meta">فترة التدقيق: {active_days} يوم</span>
             </div>
             <div class="memo-grid">
@@ -1637,8 +1942,8 @@ def build_cfo_memo_content(
             </ul>
             <div class="memo-section-title">2. التوصيات التنفيذية لهندسة القائمة (BCG Matrix)</div>
             <ul class="memo-list" style="padding-right:18px; padding-left:0;">
-                <li><span class="memo-highlight">حماية الأصناف عالية الربحية (Stars):</span> الأصناف (<em>{top_stars}</em>) تمثل الركيزة الأساسية للربح التشغيلي.</li>
-                <li><span class="memo-highlight">إعادة تسعير الأصناف منخفضة الهامش:</span> الأصناف (<em>{worst_items}</em>) تتآكل ربحيتها بسبب عمولة التوصيل. تعديل السعر بمقدار <span class="memo-code">+$1.25</span> سيضيف <span class="memo-code">+${est_monthly_recovery:,.2f} شهرياً</span> إلى صافي الأرباح.</li>
+                <li><span class="memo-highlight">حماية الأصناف عالية الربحية (Stars):</span> الأصناف (<em>{stars_h}</em>) تمثل الركيزة الأساسية للربح التشغيلي.</li>
+                <li><span class="memo-highlight">إعادة تسعير الأصناف منخفضة الهامش:</span> الأصناف (<em>{worst_h}</em>) تتآكل ربحيتها بسبب عمولة التوصيل. تعديل السعر بمقدار <span class="memo-code">+$1.25</span> سيضيف <span class="memo-code">+${est_monthly_recovery:,.2f} شهرياً</span> إلى صافي الأرباح.</li>
             </ul>
         </div>
         """
@@ -1658,7 +1963,7 @@ def build_cfo_memo_content(
     html_card = f"""
     <div class="memo-card">
         <div class="memo-header">
-            <h3 class="memo-title">EXECUTIVE CFO AUDIT MEMO — {company_name.upper()}</h3>
+            <h3 class="memo-title">EXECUTIVE CFO AUDIT MEMO — {co_up_h}</h3>
             <span class="memo-meta">AUDIT WINDOW: {active_days} ACTIVE DAYS</span>
         </div>
         <div class="memo-grid">
@@ -1675,8 +1980,8 @@ def build_cfo_memo_content(
         </ul>
         <div class="memo-section-title">2. Menu Engineering Action Plan (BCG Matrix)</div>
         <ul class="memo-list">
-            <li><span class="memo-highlight">Protect Core Stars:</span> <em>{top_stars}</em> drive peak unit contribution. Maintain full pricing and primary menu placement without discounting.</li>
-            <li><span class="memo-highlight">Reprice Underperforming SKUs:</span> <em>{worst_items}</em> fall below target contribution thresholds on delivery channels. A <span class="memo-code">+$1.25 USD</span> delivery price adjustment recovers <span class="memo-code">+${est_monthly_recovery:,.2f} USD / month</span> in net operating EBITDA.</li>
+            <li><span class="memo-highlight">Protect Core Stars:</span> <em>{stars_h}</em> drive peak unit contribution. Maintain full pricing and primary menu placement without discounting.</li>
+            <li><span class="memo-highlight">Reprice Underperforming SKUs:</span> <em>{worst_h}</em> fall below target contribution thresholds on delivery channels. A <span class="memo-code">+$1.25 USD</span> delivery price adjustment recovers <span class="memo-code">+${est_monthly_recovery:,.2f} USD / month</span> in net operating EBITDA.</li>
         </ul>
     </div>
     """
@@ -1714,13 +2019,17 @@ def render_admin_console():
         with st.form("create_client_form"):
             f1, f2 = st.columns(2)
             with f1:
-                new_username = st.text_input("Client Login Username *", placeholder="e.g., roadster_ashrafieh").strip().lower()
-                new_company = st.text_input("Company / Brand Display Name *", placeholder="e.g., Roadster Diner (Ashrafieh)")
+                new_username = st.text_input("Client Login Username *", placeholder="e.g., roadster_ashrafieh", max_chars=64).strip().lower()
+                new_company = st.text_input("Company / Brand Display Name *", placeholder="e.g., Roadster Diner (Ashrafieh)", max_chars=80)
                 new_lbp_rate = st.number_input("Default LBP / USD Rate", value=89500.0, step=500.0)
                 new_deliv_fee = st.number_input("Toters / Aggregator Fee (%)", value=25.0, step=0.5)
                 new_pkg_cost = st.number_input("Delivery Packaging / Unit ($)", value=0.65, step=0.05)
             with f2:
-                new_password = st.text_input("Client Password *", placeholder="e.g., rd2026secure")
+                new_password = st.text_input(
+                    f"Client Password (min {MIN_PASSWORD_LENGTH} chars — leave blank to auto-generate)",
+                    type="password",
+                    max_chars=256
+                )
                 new_card_fee = st.number_input("Card POS Fee (%)", value=2.0, step=0.1)
                 new_whish_fee = st.number_input("Digital Wallet / Whish Fee (%)", value=1.0, step=0.1)
                 new_waste_pct = st.number_input("Kitchen Waste Allowance (%)", value=3.0, step=0.5)
@@ -1740,13 +2049,28 @@ def render_admin_console():
             save_btn = st.form_submit_button("Create / Update Paid Client Account", type="primary", use_container_width=True)
 
             if save_btn:
-                clean_u = re.sub(r"[^a-z0-9_-]", "", new_username)
-                if not clean_u or clean_u in ["demo", get_admin_username()] or not new_password or not new_company:
-                    st.error("Please provide a valid non-reserved Username, Password, and Company Name.")
+                clean_u = safe_username(re.sub(r"[^a-z0-9_-]", "", new_username))
+                existing_profile = clients_db.get(clean_u, {}) if clean_u else {}
+                typed_pw = (new_password or "").strip()
+                if not clean_u or clean_u in ["demo", "dubai_demo", get_admin_username()] or not new_company.strip():
+                    st.error("Please provide a valid non-reserved Username (a–z, 0–9, _ or -) and a Company Name.")
+                elif typed_pw and len(typed_pw) < MIN_PASSWORD_LENGTH:
+                    st.error(f"Client passwords must be at least {MIN_PASSWORD_LENGTH} characters (or leave blank to auto-generate).")
                 else:
+                    generated_pw = None
+                    if typed_pw:
+                        stored_hash = hash_password(typed_pw)
+                    elif existing_profile.get("password"):
+                        stored_hash = existing_profile["password"]  # Updating profile settings only — keep current password
+                        if not is_password_hashed(stored_hash):
+                            stored_hash = hash_password(stored_hash)
+                    else:
+                        generated_pw = secrets.token_urlsafe(12)
+                        stored_hash = hash_password(generated_pw)
+
                     profile_payload = {
-                        "password": new_password.strip(),
-                        "company_name": new_company.strip(),
+                        "password": stored_hash,
+                        "company_name": clean_display_text(new_company, max_len=80),
                         "default_lbp_rate": float(new_lbp_rate),
                         "delivery_fee_pct": float(new_deliv_fee),
                         "card_fee_pct": float(new_card_fee),
@@ -1773,8 +2097,23 @@ def render_admin_console():
                         })
                         save_client_cogs_df(clean_u, std_c)
 
-                    st.success(f"Paid Client Account `{clean_u}` ({new_company}) is now live with full unlocked access!")
+                    # Plaintext is shown exactly once to the admin, then only the salted hash is ever stored
+                    st.session_state.admin_last_credentials = {
+                        "username": clean_u,
+                        "password": typed_pw or generated_pw,
+                    }
                     st.rerun()
+
+        last_creds = st.session_state.pop("admin_last_credentials", None)
+        if last_creds:
+            if last_creds.get("password"):
+                st.success(
+                    f"Client account `{last_creds['username']}` is live. Copy the password below now — "
+                    "it is stored only as a salted hash and cannot be displayed again."
+                )
+                st.code(f"Username: {last_creds['username']}\nPassword: {last_creds['password']}", language="text")
+            else:
+                st.success(f"Client account `{last_creds['username']}` settings were updated (password unchanged).")
 
     with col_list:
         st.markdown("#### 2. Demo Paywall & Active Client Accounts")
@@ -1792,27 +2131,58 @@ def render_admin_console():
             st.rerun()
 
         rows = []
+        legacy_plaintext_accounts = []
         for u, p in clients_db.items():
             has_cogs = "Pre-Loaded" if load_client_cogs_df(u) is not None else "Standard"
+            hashed = is_password_hashed(p.get("password", ""))
+            if not hashed and u not in ("demo", "dubai_demo"):
+                legacy_plaintext_accounts.append(u)
             rows.append({
                 "Username": u,
                 "Tier": "Public Sandbox (Paywalled)" if u in ("demo", "dubai_demo") else "Paid License (Unlocked)",
-                "Password": p.get("password", ""),
+                "Password Storage": "Salted Hash (PBKDF2)" if hashed else "Plaintext (Legacy — Rotate)",
                 "Company": p.get("company_name", ""),
                 "Saved COGS": has_cogs
             })
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
+        if legacy_plaintext_accounts:
+            st.warning(
+                "These accounts still store plaintext passwords: "
+                + ", ".join(f"`{u}`" for u in legacy_plaintext_accounts)
+                + ". Re-save them above (or paste the hashed TOML backup below into Secrets) to migrate."
+            )
+        if get_admin_password() and not is_password_hashed(get_admin_password()):
+            st.warning("Your `admin_password` secret is plaintext. Run `python generate_secrets.py` locally and paste the hash into Streamlit Secrets.")
+
         selected_client = st.selectbox("Select Account to Generate Onboarding Link or Preview", list(clients_db.keys()))
         sel_p = clients_db[selected_client]
-        magic_client_url = f"{APP_BASE_URL}/?client={selected_client}&key={urllib.parse.quote(str(sel_p['password']))}"
+
+        login_token = None
+        if selected_client not in ("demo", "dubai_demo"):
+            login_token = make_login_token(selected_client, sel_p.get("password", ""))
+
+        if selected_client in ("demo", "dubai_demo"):
+            market_q = "Dubai" if selected_client == "dubai_demo" else "Beirut"
+            link_line = f"• *Live Demo Link:* {APP_BASE_URL}/?demo=true&market={market_q}"
+        elif login_token:
+            link_line = (
+                f"• *Secure 1-Click Login Link (expires in {LOGIN_TOKEN_TTL_HOURS}h):* "
+                f"{APP_BASE_URL}/?token={urllib.parse.quote(login_token)}"
+            )
+        else:
+            link_line = f"• *Portal:* {APP_BASE_URL}"
+            st.info(
+                "Secure 1-click links are disabled until you add an `auth_signing_key` (32+ random characters) "
+                "to Streamlit Secrets. Run `python generate_secrets.py` locally to create one."
+            )
 
         onboarding_text = (
             f"*{sel_p['company_name']} — Executive POS & EBITDA Portal Access*\n\n"
             f"Your private financial reconciliation portal is now configured and live:\n"
-            f"• *Direct 1-Click Login Link:* {magic_client_url}\n"
+            f"{link_line}\n"
             f"• *Username:* {selected_client}\n"
-            f"• *Password:* {sel_p['password']}"
+            f"• *Password:* sent to you separately (never shared in the same message as the link)"
         )
         st.code(onboarding_text, language="text")
 
@@ -1848,7 +2218,7 @@ def main_portal():
     default_market = profile.get("market", "Beirut")
 
     with st.sidebar:
-        st.markdown(f"<div style='font-size:1.05rem; font-weight:700; color:#F8FAFC; margin-bottom:2px;'>{company_name}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:1.05rem; font-weight:700; color:#F8FAFC; margin-bottom:2px;'>{esc(company_name)}</div>", unsafe_allow_html=True)
         tier_label = "MASTER ADMIN" if is_admin else ("DEMO SANDBOX" if is_demo_account else "VERIFIED CLIENT LICENSE")
         st.caption(f"Account: `{st.session_state.username}` ({tier_label})")
 
@@ -1897,7 +2267,14 @@ def main_portal():
         st.link_button("Activate Private Client License", url=f"https://wa.me/{owner_wa}?text={wa_msg}", use_container_width=True)
         if st.button("Sign Out", use_container_width=True):
             st.query_params.clear()
+            # Wipe all session data (profiles, uploads, cached results) but keep brute-force counters
+            preserved = {k: st.session_state[k] for k in ("failed_login_count", "login_locked_until") if k in st.session_state}
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
+            st.session_state.update(preserved)
             st.session_state.authenticated = False
+            st.session_state.username = None
+            st.session_state.client_profile = None
             st.session_state.is_admin = False
             st.rerun()
 
@@ -1910,7 +2287,7 @@ def main_portal():
         st.markdown(f"""
         <div style="margin-bottom:0.5rem;">
             <div class="suite-kicker">FINANCIAL OPERATIONS & AUDIT</div>
-            <h1 class="suite-title">{company_name}</h1>
+            <h1 class="suite-title">{esc(company_name)}</h1>
         </div>
         """, unsafe_allow_html=True)
     with top_right:
@@ -2132,7 +2509,7 @@ def main_portal():
             st.download_button(
                 label="Export Executive Workbook (.xlsx)",
                 data=excel_bytes,
-                file_name=f"{company_name.replace(' ', '_')}_Financial_Audit.xlsx",
+                file_name=f"{safe_filename(company_name)}_Financial_Audit.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True
@@ -2214,7 +2591,7 @@ def main_portal():
         if monthly_ebitda_lift > 0:
             st.markdown(
                 f'<div class="exec-banner"><strong>Positive Net Elasticity:</strong> Even with a {volume_dropoff_pct*100:.0f}% reduction in unit volume, '
-                f'repricing <strong>{selected_item}</strong> by +${price_increase:.2f} generates <strong>+${monthly_ebitda_lift:,.2f}/month</strong> '
+                f'repricing <strong>{esc(selected_item)}</strong> by +${price_increase:.2f} generates <strong>+${monthly_ebitda_lift:,.2f}/month</strong> '
                 f'(+${monthly_ebitda_lift*12:,.2f} annualized) in incremental EBITDA.</div>',
                 unsafe_allow_html=True
             )
@@ -2286,13 +2663,13 @@ def main_portal():
             }
         )
 
-        patch_csv_bytes = repricing_df.to_csv(index=False).encode("utf-8-sig")
+        patch_csv_bytes = sanitize_df_for_export(repricing_df).to_csv(index=False).encode("utf-8-sig")
         dl_p1, dl_p2 = st.columns([1.2, 1.8])
         with dl_p1:
             st.download_button(
                 label=f"⬇️ Download Bulk POS & Aggregator Price Patch (.csv)",
                 data=patch_csv_bytes,
-                file_name=f"{company_name.replace(' ', '_')}_POS_Aggregator_Price_Patch.csv",
+                file_name=f"{safe_filename(company_name)}_POS_Aggregator_Price_Patch.csv",
                 mime="text/csv",
                 type="primary",
                 use_container_width=True
@@ -2413,7 +2790,7 @@ def main_portal():
                     st.download_button(
                         label="⬇️ Download Official Dispute Claim Packet (.xlsx)",
                         data=claim_excel_bytes,
-                        file_name=f"{company_name.replace(' ', '_')}_Aggregator_Dispute_Claim.xlsx",
+                        file_name=f"{safe_filename(company_name)}_Aggregator_Dispute_Claim.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="primary",
                         use_container_width=True
@@ -2637,6 +3014,19 @@ def main_portal():
         wa_summary_url = f"https://wa.me/?text={urllib.parse.quote(memo_wa_text)}"
         st.link_button("Forward Executive Memo via WhatsApp", url=wa_summary_url, type="primary")
 
+
+SESSION_IDLE_TIMEOUT_SECONDS = 60 * 60  # Auto sign-out after 60 minutes of inactivity
+
+if st.session_state.get("authenticated"):
+    _now = time.time()
+    _last = st.session_state.get("last_activity_ts", _now)
+    if _now - _last > SESSION_IDLE_TIMEOUT_SECONDS:
+        st.session_state.authenticated = False
+        st.session_state.username = None
+        st.session_state.client_profile = None
+        st.session_state.is_admin = False
+        st.session_state.login_notice = "Your session expired after 60 minutes of inactivity. Please sign in again."
+    st.session_state.last_activity_ts = _now
 
 if not st.session_state.authenticated:
     login_screen()
